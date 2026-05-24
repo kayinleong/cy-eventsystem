@@ -29,9 +29,16 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 
 export function StockReportTable() {
+  // Read raw slice (reference-stable across snapshots) and project inside
+  // useMemo so useSyncExternalStore's identity check stays happy. Mirrors
+  // InventoryTable's pattern; avoids the "cache getServerSnapshot" infinite-
+  // loop warning that the inline-filter shape triggers.
+  const allItems = useMockStore((s) => s.items);
+
   // REP-01 — exclude retired items from the live stock view.
-  const items = useMockStore((s) =>
-    s.items.filter((i) => i.lifecycleState !== "retired"),
+  const items = useMemo(
+    () => allItems.filter((i) => i.lifecycleState !== "retired"),
+    [allItems],
   );
 
   const columns: ColumnDef<InventoryItem>[] = useMemo(
