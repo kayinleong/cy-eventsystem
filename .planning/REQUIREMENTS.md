@@ -58,18 +58,18 @@
 
 ### Check-In (Items Returning)
 
-- [ ] **CI-01** — From an event detail page, an authorized user can open a check-in screen pre-populated with the event's open check-out lines
+- [x] **CI-01** — From an event detail page, an authorized user can open a check-in screen pre-populated with the event's open check-out lines
 - [x] **CI-02** — From `/scan?mode=checkin`, a user can scan an item; the system matches it to the user's accessible open check-outs and routes them to the right event check-in screen
-- [ ] **CI-03** — For each open line, the returned-qty field defaults to the originally checked-out qty; user decrements if anything didn't come back
-- [ ] **CI-04** — When `returnedQty < checkedOutQty`, the user must select a missing-reason from the enum (`Lost` / `Damaged` / `Not returned` / `Unknown`) before the line can be committed
-- [ ] **CI-05** — Returned-quantity flows back into `inventory.availableQty` atomically with the check-in transaction
-- [ ] **CI-06** — Damaged returns go into the `damaged` lifecycle bucket on the item, not back into `available`
-- [ ] **CI-07** — Partial check-ins are supported: a check-out of qty 5 can be reconciled across multiple check-in transactions (e.g., 3 in, 2 in later)
-- [ ] **CI-08** — Each check-in transaction records a `parentTxId` pointing at the original check-out so history can be linked
+- [x] **CI-03** — For each open line, the returned-qty field defaults to the originally checked-out qty; user decrements if anything didn't come back
+- [x] **CI-04** — When `returnedQty < checkedOutQty`, the user must select a missing-reason from the enum (`Lost` / `Damaged` / `Not returned` / `Unknown`) before the line can be committed
+- [x] **CI-05** — Returned-quantity flows back into `inventory.availableQty` atomically with the check-in transaction
+- [x] **CI-06** — Damaged returns go into the `damaged` lifecycle bucket on the item, not back into `available`
+- [x] **CI-07** — Partial check-ins are supported: a check-out of qty 5 can be reconciled across multiple check-in transactions (e.g., 3 in, 2 in later)
+- [x] **CI-08** — Each check-in transaction records a `parentTxId` pointing at the original check-out so history can be linked
 
 ### Missing Item Tracking
 
-- [ ] **MIS-01** — When check-in marks items as missing (any non-zero delta), a `missingItems` record is created with item, event, qty, reason, reporter, and `parentCheckinTxId`
+- [x] **MIS-01** — When check-in marks items as missing (any non-zero delta), a `missingItems` record is created with item, event, qty, reason, reporter, and `parentCheckinTxId`
 - [ ] **MIS-02** — `/reports/missing` lists all open missing-item records, filterable by event, item, reason, date range, status
 - [ ] **MIS-03** — Admin can resolve a missing-item record by marking it `found` (returns qty to available stock) or `writtenOff` (decrements `totalQty`)
 - [ ] **MIS-04** — Resolving a record writes a follow-up transaction so the audit trail remains complete
