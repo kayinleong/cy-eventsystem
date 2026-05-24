@@ -45,7 +45,7 @@ Every UI surface that AUTH/INV/EVT/CO/CI/MIS/REP/RP/SCN/AUD requires must exist 
 **Wave 3 — Feature blocks (parallel; depends on Waves 1+2)**
 - [x] 01-05-dashboard-PLAN.md — / dashboard with 4 KPI cards + 4 widgets — _completed 2026-05-24 (commits 539dc09, 6813762)_
 - [x] 01-06-inventory-PLAN.md — /inventory list + new + detail (with QR label + retire) + edit — _completed 2026-05-24 (commits 203df5a, 2425d5f, 461ab7c)_
-- [ ] 01-07-events-PLAN.md — /events list + new + detail (with assigned items + history tabs) + edit + cancel reconciliation dialog
+- [x] 01-07-events-PLAN.md — /events list + new + detail (with assigned items + history tabs) + edit + cancel reconciliation dialog — _completed 2026-05-24 (commits 7fce96f, fed97f8, bed1059)_
 - [ ] 01-08-scanner-and-scan-page-PLAN.md — /scan standalone scanner + scan-session context + cart + event picker + manual entry
 - [ ] 01-09-checkout-flow-PLAN.md — /events/[id]/checkout per-event scoped scan flow
 - [ ] 01-10-checkin-flow-PLAN.md — /events/[id]/checkin with pre-populated lines + damaged/missing tracking
