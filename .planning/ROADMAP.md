@@ -50,7 +50,7 @@ Every UI surface that AUTH/INV/EVT/CO/CI/MIS/REP/RP/SCN/AUD requires must exist 
 - [x] 01-09-checkout-flow-PLAN.md — /events/[id]/checkout per-event scoped scan flow — _completed 2026-05-24 (commit f48fad0)_
 - [x] 01-10-checkin-flow-PLAN.md — /events/[id]/checkin with pre-populated lines + damaged/missing tracking — _completed 2026-05-25 (commits ff825eb, 9d7af22)_
 - [x] 01-11-reports-PLAN.md — /reports/{stock,out,history,missing,repurchase} + ResolveMissingSheet — _completed 2026-05-25 (commits 21e550e, e1a12ac, 8306b6d, 1ee2b59)_
-- [ ] 01-12-users-settings-PLAN.md — /users (admin-only) with role-edit + disable, /users/invite, /settings with theme + low-stock thresholds
+- [x] 01-12-users-settings-PLAN.md — /users (admin-only) with role-edit + disable, /users/invite, /settings with theme + low-stock thresholds — _completed 2026-05-25 (commits 10c4cb7, e40f30c)_
 
 **Wave 4 — Verification gate**
 - [ ] 01-13-verification-gate-PLAN.md — Build/lint/typecheck/smoke + acceptance demo human-verify checkpoint
