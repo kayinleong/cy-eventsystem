@@ -70,26 +70,26 @@
 ### Missing Item Tracking
 
 - [x] **MIS-01** — When check-in marks items as missing (any non-zero delta), a `missingItems` record is created with item, event, qty, reason, reporter, and `parentCheckinTxId`
-- [ ] **MIS-02** — `/reports/missing` lists all open missing-item records, filterable by event, item, reason, date range, status
-- [ ] **MIS-03** — Admin can resolve a missing-item record by marking it `found` (returns qty to available stock) or `writtenOff` (decrements `totalQty`)
-- [ ] **MIS-04** — Resolving a record writes a follow-up transaction so the audit trail remains complete
+- [x] **MIS-02** — `/reports/missing` lists all open missing-item records, filterable by event, item, reason, date range, status
+- [x] **MIS-03** — Admin can resolve a missing-item record by marking it `found` (returns qty to available stock) or `writtenOff` (decrements `totalQty`)
+- [x] **MIS-04** — Resolving a record writes a follow-up transaction so the audit trail remains complete
 
 ### Reports
 
-- [ ] **REP-01** — `/reports/stock` shows every active item with current `availableQty`, `outQty`, `damagedQty`, threshold, low-stock flag
-- [ ] **REP-02** — `/reports/out` shows items currently checked out across all active events (excludes completed/cancelled events by default)
-- [ ] **REP-03** — `/reports/missing` shows open missing-item records (see MIS-02)
-- [ ] **REP-04** — `/reports/history` shows the global transaction log with filters: date range, event, item, actor, action type
-- [ ] **REP-05** — `/reports/repurchase` shows items below their low-stock threshold plus a list of items frequently flagged missing/damaged (suggesting repurchase)
-- [ ] **REP-06** — Every report exposes filters as URL query params so views are shareable and bookmarkable
-- [ ] **REP-07** — Reports paginate at 50 rows per page
+- [x] **REP-01** — `/reports/stock` shows every active item with current `availableQty`, `outQty`, `damagedQty`, threshold, low-stock flag
+- [x] **REP-02** — `/reports/out` shows items currently checked out across all active events (excludes completed/cancelled events by default)
+- [x] **REP-03** — `/reports/missing` shows open missing-item records (see MIS-02)
+- [x] **REP-04** — `/reports/history` shows the global transaction log with filters: date range, event, item, actor, action type
+- [x] **REP-05** — `/reports/repurchase` shows items below their low-stock threshold plus a list of items frequently flagged missing/damaged (suggesting repurchase)
+- [x] **REP-06** — Every report exposes filters as URL query params so views are shareable and bookmarkable
+- [x] **REP-07** — Reports paginate at 50 rows per page
 
 ### Low Stock & Repurchase Alerts
 
-- [ ] **RP-01** — Each item has a configurable `lowStockThreshold` (admin-editable; defaults to 0 = no alert)
-- [ ] **RP-02** — Dashboard shows a "Low stock" widget listing items where `availableQty <= lowStockThreshold`
+- [x] **RP-01** — Each item has a configurable `lowStockThreshold` (admin-editable; defaults to 0 = no alert)
+- [x] **RP-02** — Dashboard shows a "Low stock" widget listing items where `availableQty <= lowStockThreshold`
 - [ ] **RP-03** — Nav shows a badge with the count of low-stock items when > 0
-- [ ] **RP-04** — Admin can mark a low-stock item as "ordered" — moves it off the active alert list without changing inventory until the next manual receipt
+- [x] **RP-04** — Admin can mark a low-stock item as "ordered" — moves it off the active alert list without changing inventory until the next manual receipt
 
 ### Scanning UX
 
