@@ -32,6 +32,29 @@ Every UI surface that AUTH/INV/EVT/CO/CI/MIS/REP/RP/SCN/AUD requires must exist 
 - AUD-01..04 → audit feed component used on item-detail and event-detail pages
 - NFR-01..05, NFR-08, NFR-09 (Phase 1 portions)
 
+### Plans (13 plans across 4 waves)
+
+**Wave 1 — Foundation (parallel)**
+- [ ] 01-01-stack-types-schemas-PLAN.md — Install deps, scaffold 27 shadcn components, create entity types + Zod schemas
+- [ ] 01-02-mock-data-store-PLAN.md — Seed data (30 items/6 events/5 users/~80 transactions/6 missing), in-memory store with 14 mutators, selectors, cookie helpers, hooks
+- [ ] 01-03-shell-primitives-PLAN.md — ThemeProvider/Toaster wiring, StatusBadge, QtyStepper, generic DataTable wrapper with URL sync, EmptyState, PageHeader
+
+**Wave 2 — Auth spine (depends on Wave 1)**
+- [ ] 01-04-auth-shell-role-gate-PLAN.md — /login, /forgot-password, /set-password, /register (404), (app)/layout role gate, sidebar, top bar, breadcrumbs, role switcher
+
+**Wave 3 — Feature blocks (parallel; depends on Waves 1+2)**
+- [ ] 01-05-dashboard-PLAN.md — / dashboard with 4 KPI cards + 4 widgets
+- [ ] 01-06-inventory-PLAN.md — /inventory list + new + detail (with QR label + retire) + edit
+- [ ] 01-07-events-PLAN.md — /events list + new + detail (with assigned items + history tabs) + edit + cancel reconciliation dialog
+- [ ] 01-08-scanner-and-scan-page-PLAN.md — /scan standalone scanner + scan-session context + cart + event picker + manual entry
+- [ ] 01-09-checkout-flow-PLAN.md — /events/[id]/checkout per-event scoped scan flow
+- [ ] 01-10-checkin-flow-PLAN.md — /events/[id]/checkin with pre-populated lines + damaged/missing tracking
+- [ ] 01-11-reports-PLAN.md — /reports/{stock,out,history,missing,repurchase} + ResolveMissingSheet
+- [ ] 01-12-users-settings-PLAN.md — /users (admin-only) with role-edit + disable, /users/invite, /settings with theme + low-stock thresholds
+
+**Wave 4 — Verification gate**
+- [ ] 01-13-verification-gate-PLAN.md — Build/lint/typecheck/smoke + acceptance demo human-verify checkpoint
+
 ### Success criteria
 
 1. Every route in the locked sitemap renders without console errors in `next dev`.
