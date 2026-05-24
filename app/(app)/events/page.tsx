@@ -21,14 +21,19 @@ import { Plus } from "lucide-react";
 
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import { getMockSession } from "@/lib/auth/mock-session";
+import { requireSession } from "@/lib/auth/mock-session";
 import { EventsTable } from "@/components/feature/events/EventsTable";
 
 export const metadata: Metadata = { title: "Events" };
 
 export default async function EventsListPage() {
-  const session = await getMockSession();
-  const isAdmin = session?.role === "admin";
+  // Read session server-side so the table can render the EVT-08 access
+  // projection on the SSR pass (no empty-then-fill flash on first paint).
+  // The (app) layout already enforced auth, but call requireSession() here
+  // to narrow `session.uid` + `session.role` to non-nullable for the prop
+  // hand-off below — also defensive against direct route invocation.
+  const session = await requireSession();
+  const isAdmin = session.role === "admin";
   return (
     <div className="space-y-6">
       <PageHeader
@@ -45,7 +50,7 @@ export default async function EventsListPage() {
           ) : null
         }
       />
-      <EventsTable />
+      <EventsTable uid={session.uid} role={session.role} />
     </div>
   );
 }

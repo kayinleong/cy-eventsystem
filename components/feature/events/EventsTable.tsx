@@ -23,8 +23,8 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { useMockStore } from "@/lib/hooks/use-mock-store";
 import { useUrlTableState } from "@/lib/hooks/use-url-table-state";
 import { selectAccessibleEvents } from "@/lib/mock/selectors";
-import { useCurrentUser } from "@/lib/hooks/use-current-user";
 import type { EventDoc, EventStatus } from "@/lib/types/event";
+import type { UserRole } from "@/lib/types/user";
 import { DataTable } from "@/components/feature/table/DataTable";
 import { StatusBadge } from "@/components/feature/status/StatusBadge";
 import {
@@ -51,10 +51,20 @@ function formatDate(iso: string): string {
   });
 }
 
-export function EventsTable() {
-  const session = useCurrentUser();
+// Session uid + role are passed in from the Server Component shell (the page
+// reads the cookie server-side via getMockSession()). Passing the slice in as
+// props — rather than reading useCurrentUser() inside the table — keeps the
+// SSR render in sync with the client render (no empty-then-fill flash) and
+// keeps the EVT-08 access projection server-truthful.
+export function EventsTable({
+  uid,
+  role,
+}: {
+  uid: string;
+  role: UserRole;
+}) {
   const events = useMockStore((s) =>
-    session ? selectAccessibleEvents(s, session.uid, session.role) : [],
+    selectAccessibleEvents(s, uid, role),
   );
   const { state: url, setFilter } = useUrlTableState(["status"]);
 
