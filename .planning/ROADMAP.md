@@ -36,7 +36,7 @@ Every UI surface that AUTH/INV/EVT/CO/CI/MIS/REP/RP/SCN/AUD requires must exist 
 
 **Wave 1 — Foundation (parallel)**
 - [x] 01-01-stack-types-schemas-PLAN.md — Install deps, scaffold 27 shadcn components, create entity types + Zod schemas — _completed 2026-05-24 (commits d8f9a6a, e5548bd)_
-- [ ] 01-02-mock-data-store-PLAN.md — Seed data (30 items/6 events/5 users/~80 transactions/6 missing), in-memory store with 14 mutators, selectors, cookie helpers, hooks
+- [x] 01-02-mock-data-store-PLAN.md — Seed data (30 items/6 events/5 users/~80 transactions/6 missing), in-memory store with 14 mutators, selectors, cookie helpers, hooks — _completed 2026-05-24 (commits feacb89, 7d45c17)_
 - [ ] 01-03-shell-primitives-PLAN.md — ThemeProvider/Toaster wiring, StatusBadge, QtyStepper, generic DataTable wrapper with URL sync, EmptyState, PageHeader
 
 **Wave 2 — Auth spine (depends on Wave 1)**
