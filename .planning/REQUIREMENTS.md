@@ -46,20 +46,20 @@
 ### Check-Out (Items Going Out)
 
 - [ ] **CO-01** — From an event detail page, an authorized user can open a check-out screen scoped to that event
-- [ ] **CO-02** — From the standalone `/scan?mode=checkout` page, a user can scan an item barcode/QR, pick the destination event from a filtered list (only events they have access to and that are `planned` or `active`), enter quantity, and add to a scan-cart
-- [ ] **CO-03** — Multiple items can accumulate in the scan-cart; user can adjust or remove cart entries before committing
+- [x] **CO-02** — From the standalone `/scan?mode=checkout` page, a user can scan an item barcode/QR, pick the destination event from a filtered list (only events they have access to and that are `planned` or `active`), enter quantity, and add to a scan-cart
+- [x] **CO-03** — Multiple items can accumulate in the scan-cart; user can adjust or remove cart entries before committing
 - [ ] **CO-04** — Submitting the cart commits all items atomically — a single Firestore transaction that decrements every item's `availableQty`, increments `outQty`, and writes one `checkout` transaction per cart line
 - [ ] **CO-05** — System refuses to check out a quantity that would drive `availableQty` below 0; the entire cart commit fails with a clear error indicating which line(s) were insufficient
-- [ ] **CO-06** — Optimistic UI shows the reduced `availableQty` immediately on cart-add and reverts cleanly on server rejection
-- [ ] **CO-07** — Scanner debounces duplicate reads of the same value within 1.5s; provides audible + haptic feedback on successful scan
-- [ ] **CO-08** — Scanner has a manual-entry fallback input (typed SKU) used when camera is unavailable
-- [ ] **CO-09** — Scanner accepts QR Code, Code 128, EAN-13, UPC-A, and Data Matrix formats
+- [x] **CO-06** — Optimistic UI shows the reduced `availableQty` immediately on cart-add and reverts cleanly on server rejection
+- [x] **CO-07** — Scanner debounces duplicate reads of the same value within 1.5s; provides audible + haptic feedback on successful scan
+- [x] **CO-08** — Scanner has a manual-entry fallback input (typed SKU) used when camera is unavailable
+- [x] **CO-09** — Scanner accepts QR Code, Code 128, EAN-13, UPC-A, and Data Matrix formats
 - [ ] **CO-10** — Bluetooth handheld scanners (which act as keyboards) input into the same handler as the camera scanner
 
 ### Check-In (Items Returning)
 
 - [ ] **CI-01** — From an event detail page, an authorized user can open a check-in screen pre-populated with the event's open check-out lines
-- [ ] **CI-02** — From `/scan?mode=checkin`, a user can scan an item; the system matches it to the user's accessible open check-outs and routes them to the right event check-in screen
+- [x] **CI-02** — From `/scan?mode=checkin`, a user can scan an item; the system matches it to the user's accessible open check-outs and routes them to the right event check-in screen
 - [ ] **CI-03** — For each open line, the returned-qty field defaults to the originally checked-out qty; user decrements if anything didn't come back
 - [ ] **CI-04** — When `returnedQty < checkedOutQty`, the user must select a missing-reason from the enum (`Lost` / `Damaged` / `Not returned` / `Unknown`) before the line can be committed
 - [ ] **CI-05** — Returned-quantity flows back into `inventory.availableQty` atomically with the check-in transaction
@@ -93,12 +93,12 @@
 
 ### Scanning UX
 
-- [ ] **SCN-01** — `/scan` is a dedicated standalone scanner page with a mode toggle (check-out / check-in)
-- [ ] **SCN-02** — Scanner uses the rear camera by default (`facingMode: { ideal: 'environment' }`)
-- [ ] **SCN-03** — Camera permission errors render iOS-specific re-enable instructions
-- [ ] **SCN-04** — Scan-to-cart flow keeps the camera open between scans; cart is visible on-screen for review before commit
-- [ ] **SCN-05** — Torch toggle is available where the device exposes it (Chrome Android; iOS Safari does not)
-- [ ] **SCN-06** — Manual-entry fallback (typed SKU) is always reachable from the scanner page
+- [x] **SCN-01** — `/scan` is a dedicated standalone scanner page with a mode toggle (check-out / check-in)
+- [x] **SCN-02** — Scanner uses the rear camera by default (`facingMode: { ideal: 'environment' }`)
+- [x] **SCN-03** — Camera permission errors render iOS-specific re-enable instructions
+- [x] **SCN-04** — Scan-to-cart flow keeps the camera open between scans; cart is visible on-screen for review before commit
+- [x] **SCN-05** — Torch toggle is available where the device exposes it (Chrome Android; iOS Safari does not)
+- [x] **SCN-06** — Manual-entry fallback (typed SKU) is always reachable from the scanner page
 
 ### Audit Log
 
