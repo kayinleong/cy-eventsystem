@@ -47,7 +47,7 @@ Every UI surface that AUTH/INV/EVT/CO/CI/MIS/REP/RP/SCN/AUD requires must exist 
 - [x] 01-06-inventory-PLAN.md — /inventory list + new + detail (with QR label + retire) + edit — _completed 2026-05-24 (commits 203df5a, 2425d5f, 461ab7c)_
 - [x] 01-07-events-PLAN.md — /events list + new + detail (with assigned items + history tabs) + edit + cancel reconciliation dialog — _completed 2026-05-24 (commits 7fce96f, fed97f8, bed1059)_
 - [x] 01-08-scanner-and-scan-page-PLAN.md — /scan standalone scanner + scan-session context + cart + event picker + manual entry — _completed 2026-05-24 (commits 6370c32, 0133038, 267639b)_
-- [ ] 01-09-checkout-flow-PLAN.md — /events/[id]/checkout per-event scoped scan flow
+- [x] 01-09-checkout-flow-PLAN.md — /events/[id]/checkout per-event scoped scan flow — _completed 2026-05-24 (commit f48fad0)_
 - [ ] 01-10-checkin-flow-PLAN.md — /events/[id]/checkin with pre-populated lines + damaged/missing tracking
 - [ ] 01-11-reports-PLAN.md — /reports/{stock,out,history,missing,repurchase} + ResolveMissingSheet
 - [ ] 01-12-users-settings-PLAN.md — /users (admin-only) with role-edit + disable, /users/invite, /settings with theme + low-stock thresholds

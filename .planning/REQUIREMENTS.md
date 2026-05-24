@@ -45,16 +45,16 @@
 
 ### Check-Out (Items Going Out)
 
-- [ ] **CO-01** — From an event detail page, an authorized user can open a check-out screen scoped to that event
+- [x] **CO-01** — From an event detail page, an authorized user can open a check-out screen scoped to that event
 - [x] **CO-02** — From the standalone `/scan?mode=checkout` page, a user can scan an item barcode/QR, pick the destination event from a filtered list (only events they have access to and that are `planned` or `active`), enter quantity, and add to a scan-cart
 - [x] **CO-03** — Multiple items can accumulate in the scan-cart; user can adjust or remove cart entries before committing
-- [ ] **CO-04** — Submitting the cart commits all items atomically — a single Firestore transaction that decrements every item's `availableQty`, increments `outQty`, and writes one `checkout` transaction per cart line
-- [ ] **CO-05** — System refuses to check out a quantity that would drive `availableQty` below 0; the entire cart commit fails with a clear error indicating which line(s) were insufficient
+- [x] **CO-04** — Submitting the cart commits all items atomically — a single Firestore transaction that decrements every item's `availableQty`, increments `outQty`, and writes one `checkout` transaction per cart line
+- [x] **CO-05** — System refuses to check out a quantity that would drive `availableQty` below 0; the entire cart commit fails with a clear error indicating which line(s) were insufficient
 - [x] **CO-06** — Optimistic UI shows the reduced `availableQty` immediately on cart-add and reverts cleanly on server rejection
 - [x] **CO-07** — Scanner debounces duplicate reads of the same value within 1.5s; provides audible + haptic feedback on successful scan
 - [x] **CO-08** — Scanner has a manual-entry fallback input (typed SKU) used when camera is unavailable
 - [x] **CO-09** — Scanner accepts QR Code, Code 128, EAN-13, UPC-A, and Data Matrix formats
-- [ ] **CO-10** — Bluetooth handheld scanners (which act as keyboards) input into the same handler as the camera scanner
+- [x] **CO-10** — Bluetooth handheld scanners (which act as keyboards) input into the same handler as the camera scanner
 
 ### Check-In (Items Returning)
 
