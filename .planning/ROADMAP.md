@@ -40,7 +40,7 @@ Every UI surface that AUTH/INV/EVT/CO/CI/MIS/REP/RP/SCN/AUD requires must exist 
 - [x] 01-03-shell-primitives-PLAN.md — ThemeProvider/Toaster wiring, StatusBadge, QtyStepper, generic DataTable wrapper with URL sync, EmptyState, PageHeader — _completed 2026-05-24 (commits 0ed298d, 491ec34)_
 
 **Wave 2 — Auth spine (depends on Wave 1)**
-- [ ] 01-04-auth-shell-role-gate-PLAN.md — /login, /forgot-password, /set-password, /register (404), (app)/layout role gate, sidebar, top bar, breadcrumbs, role switcher
+- [x] 01-04-auth-shell-role-gate-PLAN.md — /login, /forgot-password, /set-password, /register (404), (app)/layout role gate, sidebar, top bar, breadcrumbs, role switcher — _completed 2026-05-24 (commits 4eac7cf, 2d00a01)_
 
 **Wave 3 — Feature blocks (parallel; depends on Waves 1+2)**
 - [ ] 01-05-dashboard-PLAN.md — / dashboard with 4 KPI cards + 4 widgets
