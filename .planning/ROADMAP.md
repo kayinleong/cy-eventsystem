@@ -43,7 +43,7 @@ Every UI surface that AUTH/INV/EVT/CO/CI/MIS/REP/RP/SCN/AUD requires must exist 
 - [x] 01-04-auth-shell-role-gate-PLAN.md — /login, /forgot-password, /set-password, /register (404), (app)/layout role gate, sidebar, top bar, breadcrumbs, role switcher — _completed 2026-05-24 (commits 4eac7cf, 2d00a01)_
 
 **Wave 3 — Feature blocks (parallel; depends on Waves 1+2)**
-- [ ] 01-05-dashboard-PLAN.md — / dashboard with 4 KPI cards + 4 widgets
+- [x] 01-05-dashboard-PLAN.md — / dashboard with 4 KPI cards + 4 widgets — _completed 2026-05-24 (commits 539dc09, 6813762)_
 - [ ] 01-06-inventory-PLAN.md — /inventory list + new + detail (with QR label + retire) + edit
 - [ ] 01-07-events-PLAN.md — /events list + new + detail (with assigned items + history tabs) + edit + cancel reconciliation dialog
 - [ ] 01-08-scanner-and-scan-page-PLAN.md — /scan standalone scanner + scan-session context + cart + event picker + manual entry
