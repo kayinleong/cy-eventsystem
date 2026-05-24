@@ -1,0 +1,89 @@
+// Persistent left sidebar — role-aware nav rail visible at md+ breakpoints.
+//
+// UI-SPEC: "App shell" (lines 158-164) — sidebar items: Dashboard / Inventory /
+// Scan / Events / Reports / Users (admin) / Settings, plus icon mapping.
+// PATTERNS: "Active-nav sidebar" (lines 856-903) — usePathname pattern.
+// AUTH-10: the Users nav item is admin-only (filter at item level).
+//
+// Active-link logic:
+//   - `/` (Dashboard) matches ONLY on `pathname === "/"` (avoid false-positive
+//     active state on every sub-route).
+//   - All other items match on equality OR startsWith(`href/`) so
+//     `/inventory/abc` activates the Inventory item.
+
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  LayoutDashboard,
+  Package,
+  Calendar,
+  ScanLine,
+  BarChart3,
+  Users,
+  Settings,
+  type LucideIcon,
+} from "lucide-react";
+
+import { cn } from "@/lib/utils";
+import type { UserRole } from "@/lib/types/user";
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  roles: ReadonlyArray<UserRole>;
+};
+
+const items: ReadonlyArray<NavItem> = [
+  { href: "/",              label: "Dashboard", icon: LayoutDashboard, roles: ["admin", "staff"] },
+  { href: "/inventory",     label: "Inventory", icon: Package,         roles: ["admin", "staff"] },
+  { href: "/scan",          label: "Scan",      icon: ScanLine,        roles: ["admin", "staff"] },
+  { href: "/events",        label: "Events",    icon: Calendar,        roles: ["admin", "staff"] },
+  { href: "/reports/stock", label: "Reports",   icon: BarChart3,       roles: ["admin", "staff"] },
+  { href: "/users",         label: "Users",     icon: Users,           roles: ["admin"] }, // AUTH-10
+  { href: "/settings",      label: "Settings",  icon: Settings,        roles: ["admin", "staff"] },
+];
+
+function isActive(pathname: string, href: string): boolean {
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+export function AppSidebar({ role }: { role: UserRole }) {
+  const pathname = usePathname();
+  return (
+    <aside className="hidden md:flex w-60 flex-col border-r bg-sidebar shrink-0">
+      <div className="px-4 py-5 border-b">
+        <Link href="/" className="text-base font-semibold">
+          cy-eventsystem
+        </Link>
+      </div>
+      <nav className="flex flex-col gap-1 p-3">
+        {items
+          .filter((i) => i.roles.includes(role))
+          .map((item) => {
+            const active = isActive(pathname, item.href);
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  active
+                    ? "bg-primary text-primary-foreground"
+                    : "text-foreground hover:bg-muted"
+                )}
+              >
+                <Icon className="size-4" />
+                {item.label}
+              </Link>
+            );
+          })}
+      </nav>
+    </aside>
+  );
+}
