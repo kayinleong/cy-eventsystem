@@ -171,6 +171,45 @@ All v1 requirements not delivered in Phase 1 land here, plus the functional half
 7. `firestore.indexes.json` is in the repo and `firebase deploy --only firestore` succeeds without auto-create prompts.
 8. `npm run build` succeeds; `tsc --noEmit` passes; ESLint passes.
 
+### Plans (15 plans across 13 waves)
+
+**Wave 1 — Spike (gates everything; autonomous: false)**
+- [ ] 02-01-spike-auth-edge-PLAN.md — 1-day spike on `next-firebase-auth-edge` v1.12 against Next 16.2.6 per D-01; FINDINGS.md gates plan 02-02
+
+**Wave 2-3 — Block A Foundation**
+- [ ] 02-02-firebase-clients-and-proxy-PLAN.md — Firebase clients + proxy.ts + DAL + session route handlers + firestore.rules/indexes/storage manifests
+- [ ] 02-03-auth-pages-wired-PLAN.md — /login + /forgot-password + /set-password wired to Firebase; (app)/layout role gate swapped; seed-first-admin.ts; POC affordances deleted
+
+**Wave 4 — Block B Users**
+- [ ] 02-04-users-cloud-function-and-actions-PLAN.md — 2 Cloud Functions (setCustomUserClaims + allowedStaff sync); inviteUser/setUserRole/disableUser Server Actions; Copy-link UI per D-09
+
+**Wave 5-6 — Block C Inventory**
+- [ ] 02-05-inventory-data-layer-and-actions-PLAN.md — Admin SDK readers + live hooks + photo upload helper + 6 Server Actions with isLowStock denorm per P11
+- [ ] 02-06-inventory-ui-photo-and-cursor-PLAN.md — UI swap to actions; D-15 photo field; D-17 cursor URL migration; audit feed; Block C rules audit
+
+**Wave 7 — Block D Events**
+- [ ] 02-07-events-data-and-cloud-function-PLAN.md — events data layer + 3 Server Actions; EVT-08 at 3 layers; Cloud Function 2 verified; Block D rules audit
+
+**Wave 8 — Block E Checkout**
+- [ ] 02-08-checkout-action-and-scan-PLAN.md — commitCheckoutCartAction marquee transaction; CO-05 invariant; useOptimistic revert preserved; concurrent invariant test
+
+**Wave 9 — Block F Check-in + Missing**
+- [ ] 02-09-checkin-action-and-missing-PLAN.md — commitCheckinCartAction; CI-06 damaged routing; MIS-01..04; resolveMissing admin action; Block F rules audit
+
+**Wave 10 — Block G Reports**
+- [ ] 02-10-reports-and-aggregations-PLAN.md — 5 reports + dashboard KPIs via count() (D-21); RP-03 nav badge; Block G rules audit
+
+**Wave 11-12 — Block H Hardening**
+- [ ] 02-11-server-action-and-revalidate-audit-PLAN.md — Server Action audit matrix; delete lib/mock wholesale
+- [ ] 02-12-error-loading-not-found-segments-PLAN.md — per-segment error.tsx/loading.tsx/not-found.tsx + unauthorized.tsx
+- [ ] 02-13-offline-and-pwa-PLAN.md — OfflineBanner + scanner-disable-on-offline + PWA manifest (RES-01..04)
+- [ ] 02-14-rules-and-index-audit-PLAN.md — final cross-collection Rules Playground audit + index reconciliation
+
+**Wave 13 — Verification gate**
+- [ ] 02-15-verification-gate-PLAN.md — 10-step acceptance demo + automated gates + CLAIM.md closure
+
+**Plans:** 15 plans
+
 ### Out of scope for Phase 2 (i.e., v2 candidates)
 
 Reservations/holds, kits/bundles, unique-asset serial tracking, asset condition tracking with photos, maintenance workflow, sub-locations, email/Slack notifications, bulk CSV import, per-event Staff permissions, calendar/Gantt view, custom fields.
