@@ -32,12 +32,20 @@ const app: App =
   getApps()[0] ??
   initializeApp({
     credential: cert({ projectId, clientEmail, privateKey }),
+    projectId, // surface on app.options for diagnostics + downstream consistency
     storageBucket,
   });
 
-// Startup assertion per FINDINGS A2 — catch credential mismatch immediately
-// rather than discovering it on the first Firestore call.
-if (app.options.projectId !== projectId) {
+// FINDINGS A2 told us to catch credential mismatch early. The original
+// `app.options.projectId !== projectId` check is unsafe: Firebase Admin SDK
+// does NOT auto-populate options.projectId from the cert credential
+// (verified empirically — it stays `undefined`). We now pass `projectId`
+// explicitly to initializeApp above, so `app.options.projectId` is a
+// reliable echo. The FINDINGS A2 root cause (mismatched private key vs
+// clientEmail in .env.local producing `invalid_grant: account not found`)
+// surfaces on the first authenticated RPC, not at boot — there is no
+// cheap synchronous boot check that catches it.
+if (app.options.projectId && app.options.projectId !== projectId) {
   throw new Error(
     `Firebase project ID mismatch: app initialized with ${app.options.projectId}, env says ${projectId}`,
   );
