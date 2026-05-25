@@ -99,6 +99,32 @@ User-attested manual Firebase Console Rules Playground audit per D-06 mitigation
 - See `.planning/phases/phase-kayinleong-02/02-03-auth-pages-wired-SUMMARY.md` for full details + deviation register + manual verification checkpoint instructions.
 - **Plan 02-03 gate:** awaiting `npm run seed:first-admin` execution + manual E2E sign-in pass per SUMMARY.md "CHECKPOINT REACHED" section.
 
+### Plan 02-04 (users + 2 Cloud Functions + invite — Wave 4, Block B) — code complete; deploy + Block B rules audit pending (2026-05-25)
+
+- `functions/` package scaffolded: `package.json` (engines.node: 20, firebase-admin ^13, firebase-functions ^6, NO `serve`/`emulators` per D-04), `tsconfig.json` (target es2020, commonjs, outDir lib), `.gitignore` (lib, node_modules, *.log). Commit `bca3052`.
+- `firebase.json` updated: functions block adds `ignore` + `predeploy: ["npm --prefix \"$RESOURCE_DIR\" run build"]`. Root `.gitignore`: defense-in-depth ignore for `functions/lib/` + `functions/node_modules/`.
+- Cloud Function 1 — `functions/src/setCustomUserClaims.ts`: `onDocumentWritten('users/{uid}', region: asia-southeast1)` → mirror `users/{uid}.role` to Auth custom claims; strip claims when doc deleted; P6 rate-limit guard skips no-op writes; `revokeRefreshTokens(uid)` on role change for AUTH-08 immediate propagation. Commit `e8bca18`.
+- Cloud Function 2 — `functions/src/syncAllowedStaff.ts`: 2 trigger registrations sharing `recomputeForEvent()`. `onEventTeamChange('events/{eventId}')` with `onlyAllowedStaffChanged` self-write loop guard (RESEARCH P5/A6); `onUserRoleChange('users/{uid}')` recomputes ALL events only when admin status flips. Commit `e8bca18`.
+- `functions/src/index.ts`: re-exports `onUserWriteSetClaims` + `onEventTeamChange` + `onUserRoleChange` (3 trigger registrations of 2 logical functions per refined D-02). `npm --prefix functions run build` exits 0; `functions/lib/{index,setCustomUserClaims,syncAllowedStaff}.js` compiled.
+- `app/(app)/users/actions.ts` (NEW): 3 Server Actions all gated by `requireAdmin()` from real DAL — `inviteUser(formData)` (Zod parse via `InviteUserSchema` from `@/lib/schemas/user`; `createUser` → write `users/{uid}` → `generatePasswordResetLink` → returns `{ok:true, uid, resetLink}` per D-09); `setUserRole(uid, role)` (last-admin demote guard; Cloud Functions handle claim mirror + allowedStaff recompute); `disableUser(uid, disabled)` (cannot-disable-self guard; revokes refresh tokens). All 3 call `revalidatePath('/users')` on success. Commit `d1b687f`.
+- `lib/data/users.server.ts` (NEW): `getUsersPage({cursor, limit, filters})` cursor-paged read per D-17 (base64 `{displayName, uid}` cursor); `getUserServer(uid)` single-doc helper; Firestore `Timestamp → ISO string` conversion preserves Phase 1 UserDoc shape. Commit `6f93334`.
+- `lib/hooks/use-users-live.ts` (NEW): `useUsersLive(initial, {role?, limit?})` `onSnapshot` scoped to 50-row window per D-20. Commit `6f93334`.
+- `app/(app)/users/page.tsx`: Server Component swap — `requireAdmin()` from DAL + `getUsersPage()` SSR seed → `<UsersTable initialUsers nextCursor currentUserUid>`. Commit `27df45b`.
+- `app/(app)/users/invite/page.tsx`: `requireAdmin` import swap mock-session → DAL.
+- `app/(app)/users/invite/_components/invite-user-page-form.tsx`: RHF preserved, on submit builds FormData + calls `inviteUser`; D-09 Copy-link panel on success with "Copy link" / "Invite another" / "Back to users".
+- `components/feature/users/UsersTable.tsx`: `useMockStore` → `useUsersLive`; D-17 prev (router.back) + next (Link `?cursor=`) chrome.
+- `components/feature/users/InviteUserSheet.tsx`: Sheet preserved; Server Action call + D-09 Copy-link success panel inside Sheet.
+- `components/feature/users/UserRoleSelectInline.tsx`: `setUserRole` Server Action + useTransition; removed seedUsers actor lookup.
+- `components/feature/users/DisableUserButton.tsx`: `disableUser(uid, true)` Server Action + useTransition; AlertDialog preserved.
+- `eslint.config.mjs`: globalIgnores for `functions/lib/**` + `functions/node_modules/**` (deviation: root lint choked on Cloud Functions CommonJS output).
+- Deviations (auto-fixes, all Rule 1/3):
+  - Rule 3 — `InviteUserSchema` is in `@/lib/schemas/user`, not `@/lib/schemas/auth` as plan text said. Imported from existing location.
+  - Rule 1 — Plan's `toMillis() → number | null` would break UsersTable's `new Date(createdAt)` call; converted Timestamp → ISO string instead to preserve Phase 1 UserDoc contract.
+  - Rule 3 — Root ESLint scanned compiled `functions/lib/*.js` and flagged CommonJS `require()`. Added `functions/lib/**` + `functions/node_modules/**` to `globalIgnores`.
+- Verification gates: `npx tsc --noEmit` PASS, `npm run lint` PASS (1 pre-existing Phase 1 DataTable warning untouched per plans 02-02/02-03), `npm run build` PASS (28 routes, proxy.ts recognized), `npm --prefix functions run build` PASS. No `verifySessionCookie`/`createSessionCookie` calls. No emulator references in `functions/package.json`.
+- See `.planning/phases/phase-kayinleong-02/02-04-users-cloud-function-and-actions-SUMMARY.md` for full details.
+- **Plan 02-04 gate:** awaiting `firebase deploy --only functions` + end-to-end invite/role/disable smoke tests + Block B rules audit per SUMMARY.md "CHECKPOINT REACHED" section.
+
 ## Verification
 
 (Populated when phase completes — must include Regression Report per global CLAUDE.md.)
