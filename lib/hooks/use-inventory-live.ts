@@ -15,6 +15,7 @@
 // across the SSR seed and the client live update.
 
 import { useEffect, useState } from "react";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   query,
@@ -28,7 +29,7 @@ import {
   type QueryDocumentSnapshot,
   type FirestoreError,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase/client";
+import { auth, db } from "@/lib/firebase/client";
 import type { InventoryItem, ItemCategory, ItemLifecycleState } from "@/lib/types/item";
 
 function tsToIso(ts: unknown): string | null {
@@ -78,23 +79,44 @@ export function useInventoryLive(
   const [items, setItems] = useState<InventoryItem[]>(initial);
 
   useEffect(() => {
-    const constraints: QueryConstraint[] = [];
-    if (opts.category) constraints.push(where("category", "==", opts.category));
-    if (opts.lifecycleState) constraints.push(where("lifecycleState", "==", opts.lifecycleState));
-    if (opts.isLowStock === true) constraints.push(where("isLowStock", "==", true));
-    constraints.push(orderBy("name"), orderBy(documentId()), fbLimit(opts.limit ?? 50));
+    // Gate the onSnapshot subscription on auth state. The Firebase Web SDK's
+    // auth.currentUser hydrates asynchronously from IndexedDB; if we subscribe
+    // before that completes, Firestore sees the request as unauthenticated
+    // and returns permission-denied even when the rule is `if isSignedIn()`.
+    // onAuthStateChanged fires once with the resolved state (null OR user),
+    // so we register the listener inside the callback.
+    let unsubSnap: (() => void) | null = null;
 
-    const q = query(collection(db, "inventory"), ...constraints);
-    const unsub = onSnapshot(
-      q,
-      (snap: QuerySnapshot) => {
-        setItems(snap.docs.map((d) => toItem(d as QueryDocumentSnapshot)));
-      },
-      (err: FirestoreError) => {
-        console.error("[useInventoryLive] onSnapshot error:", err.code, err.message);
-      },
-    );
-    return () => unsub();
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      // Tear down any existing subscription (covers re-auth flow)
+      if (unsubSnap) {
+        unsubSnap();
+        unsubSnap = null;
+      }
+      if (!user) return; // not signed in — don't subscribe
+
+      const constraints: QueryConstraint[] = [];
+      if (opts.category) constraints.push(where("category", "==", opts.category));
+      if (opts.lifecycleState) constraints.push(where("lifecycleState", "==", opts.lifecycleState));
+      if (opts.isLowStock === true) constraints.push(where("isLowStock", "==", true));
+      constraints.push(orderBy("name"), orderBy(documentId()), fbLimit(opts.limit ?? 50));
+
+      const q = query(collection(db, "inventory"), ...constraints);
+      unsubSnap = onSnapshot(
+        q,
+        (snap: QuerySnapshot) => {
+          setItems(snap.docs.map((d) => toItem(d as QueryDocumentSnapshot)));
+        },
+        (err: FirestoreError) => {
+          console.error("[useInventoryLive] onSnapshot error:", err.code, err.message);
+        },
+      );
+    });
+
+    return () => {
+      if (unsubSnap) unsubSnap();
+      unsubAuth();
+    };
   }, [opts.category, opts.lifecycleState, opts.isLowStock, opts.limit]);
 
   return items;

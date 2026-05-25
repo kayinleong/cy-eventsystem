@@ -25,6 +25,7 @@
 // future rule tightening immediately.
 
 import { useEffect, useState } from "react";
+import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
   query,
@@ -37,7 +38,7 @@ import {
   type QueryDocumentSnapshot,
   type FirestoreError,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase/client";
+import { auth, db } from "@/lib/firebase/client";
 import type { TransactionDoc, TransactionType } from "@/lib/types/transaction";
 import type { UserRole } from "@/lib/types/user";
 
@@ -94,28 +95,44 @@ export function useTransactionsLive(
   const [txs, setTxs] = useState<TransactionDoc[]>(opts.initial ?? []);
 
   useEffect(() => {
-    const constraints: QueryConstraint[] = [];
-    if (opts.itemId) constraints.push(where("itemId", "==", opts.itemId));
-    if (opts.eventId) constraints.push(where("eventId", "==", opts.eventId));
-    if (opts.actorUid) constraints.push(where("actorUid", "==", opts.actorUid));
-    if (opts.type) constraints.push(where("type", "==", opts.type));
-    constraints.push(orderBy("at", "desc"), fbLimit(opts.limit ?? 50));
+    // Gate the subscription on auth.currentUser via onAuthStateChanged —
+    // same race as useInventoryLive. See that file for the full explanation.
+    let unsubSnap: (() => void) | null = null;
 
-    const q = query(collection(db, "transactions"), ...constraints);
-    const unsub = onSnapshot(
-      q,
-      (snap: QuerySnapshot) => {
-        setTxs(snap.docs.map((d) => toTx(d as QueryDocumentSnapshot)));
-      },
-      (err: FirestoreError) => {
-        console.error(
-          "[useTransactionsLive] onSnapshot error:",
-          err.code,
-          err.message,
-        );
-      },
-    );
-    return () => unsub();
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (unsubSnap) {
+        unsubSnap();
+        unsubSnap = null;
+      }
+      if (!user) return;
+
+      const constraints: QueryConstraint[] = [];
+      if (opts.itemId) constraints.push(where("itemId", "==", opts.itemId));
+      if (opts.eventId) constraints.push(where("eventId", "==", opts.eventId));
+      if (opts.actorUid) constraints.push(where("actorUid", "==", opts.actorUid));
+      if (opts.type) constraints.push(where("type", "==", opts.type));
+      constraints.push(orderBy("at", "desc"), fbLimit(opts.limit ?? 50));
+
+      const q = query(collection(db, "transactions"), ...constraints);
+      unsubSnap = onSnapshot(
+        q,
+        (snap: QuerySnapshot) => {
+          setTxs(snap.docs.map((d) => toTx(d as QueryDocumentSnapshot)));
+        },
+        (err: FirestoreError) => {
+          console.error(
+            "[useTransactionsLive] onSnapshot error:",
+            err.code,
+            err.message,
+          );
+        },
+      );
+    });
+
+    return () => {
+      if (unsubSnap) unsubSnap();
+      unsubAuth();
+    };
   }, [opts.itemId, opts.eventId, opts.actorUid, opts.type, opts.limit]);
 
   return txs;
