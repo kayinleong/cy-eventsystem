@@ -32,6 +32,13 @@ Phase 2 internally organized into ROADMAP Blocks A–H (Foundation, Users + role
   - Both share the same recompute logic in a single source file `functions/src/allowed-staff.ts` exporting `computeAllowedStaff(eventId)`.
   - Self-write loop guard per RESEARCH A6: skip if `event.allowedStaff` already equals computed union.
   - Original D-02 OR-formulation reflected pre-research intent; both triggers are required.
+- **D-02 (re-amended during execution, 2026-05-25 — Block C completion):** Cloud Functions REMOVED ENTIRELY. The 3 deployed triggers were deleted; the `functions/` directory was removed; `firebase.json` no longer declares functions. The logical work moved into Server Actions:
+  - **Function 1 (setCustomUserClaims + revokeRefreshTokens)** → inlined into `inviteUser`, `setUserRole`, and `disableUser` in `app/(app)/users/actions.ts`. Server Action writes Firestore → mirrors role to Auth custom claims → revokes refresh tokens, all synchronously.
+  - **Function 2 (allowedStaff sync)** → inlined into the same user actions (`recomputeAllowedStaffForAllEvents` when admin status flips) and into the events Server Actions in plan 02-07 (`recomputeAllowedStaffForEvent(id)` when teamLeads / backupTeams change).
+  - Shared helper: `lib/data/allowed-staff.server.ts` exporting `computeAllowedStaff(eventId)`, `recomputeAllowedStaffForEvent(eventId)`, `recomputeAllowedStaffForAllEvents()`.
+  - **Why:** simpler deploy surface (one app, no separate functions package), no async propagation lag, no Cloud Functions cost, no self-write loop guard needed (the writer is the action). At v1 scale (<100 events, low-frequency admin actions) the synchronous all-events sweep on admin-status flip is acceptable.
+  - **Limitation accepted:** changes made via the Firebase Console directly to a `users/{uid}` doc no longer auto-propagate to claims. Our admin workflow never modifies users via Console — always via the actions — so this is fine for v1.
+  - Plan 02-04 SUMMARY.md notes preserved as historical record; "what was built" docs accurate to the moment but architecture has moved on.
 - **D-03:** **Single Firebase project** for everything (prod). No staging environment, no per-developer dev projects. Local `npm run dev` writes to the live Firestore. Sole developer per PROJECT.md — data contention is zero.
 - **D-04:** **No Firebase Emulator Suite** for dev or local testing. All dev iteration hits the live project.
 - **D-05:** First admin user via **`scripts/seed-first-admin.ts`** — a one-time Admin SDK script that `createUser` → `setCustomUserClaims({role:'admin'})` → writes `users/{uid}` doc with `role:'admin'`. Run manually after Firebase project provision. Documented in PROJECT.md Context section + this CONTEXT.md.

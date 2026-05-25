@@ -11,6 +11,7 @@ import { adminAuth, adminDb } from "@/lib/firebase/admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { revalidatePath } from "next/cache";
 import { InviteUserSchema } from "@/lib/schemas/user";
+import { recomputeAllowedStaffForAllEvents } from "@/lib/data/allowed-staff.server";
 
 /**
  * inviteUser — AUTH-07. Creates a Firebase Auth user without a password,
@@ -44,7 +45,7 @@ export async function inviteUser(formData: FormData) {
       disabled: false,
     });
 
-    // 2. Write users/{uid} — Cloud Function 1 picks this up and sets claims
+    // 2. Write users/{uid} — Firestore is the source of truth for role.
     await adminDb.collection("users").doc(userRecord.uid).set({
       uid: userRecord.uid,
       email,
@@ -55,6 +56,22 @@ export async function inviteUser(formData: FormData) {
       createdBy: session.uid,
       lastLoginAt: null,
     });
+
+    // 2b. Inlined Function 1 (was Cloud Function `onUserWriteSetClaims`):
+    // mirror role to the user's Auth custom claims so subsequent ID tokens
+    // carry `role` and downstream rules `request.auth.token.role` work
+    // without the DAL Firestore fallback. New users have no existing
+    // refresh tokens, so we skip revokeRefreshTokens here.
+    await adminAuth.setCustomUserClaims(userRecord.uid, { role });
+
+    // 2c. Inlined Function 2 (was `onUserRoleChange`): if the new user is
+    // an admin, every event's allowedStaff array must include them. Iterate
+    // events and recompute. Skipped for staff invites (no event membership
+    // change). At v1 scale (<100 events) the sweep is acceptable.
+    if (role === "admin") {
+      await recomputeAllowedStaffForAllEvents();
+      revalidatePath("/events");
+    }
 
     // 3. Generate password reset link (D-07/D-09)
     const actionCodeSettings = {
@@ -102,7 +119,14 @@ export async function inviteUser(formData: FormData) {
 }
 
 /**
- * setUserRole — AUTH-08. Updates users/{uid}.role; Cloud Function 1 updates claims + revokes refresh tokens.
+ * setUserRole — AUTH-08.
+ *
+ * Inlined Cloud Functions 1 + 2:
+ *   - Update Firestore users/{uid}.role (source of truth)
+ *   - Mirror role to Auth custom claims via setCustomUserClaims
+ *   - Revoke refresh tokens so the user picks up new claims on next request
+ *   - If admin status flipped (was admin XOR now admin), recompute
+ *     allowedStaff on every event so role-based event access stays in sync
  */
 export async function setUserRole(uid: string, role: "admin" | "staff") {
   const session = await requireAdmin();
@@ -119,11 +143,34 @@ export async function setUserRole(uid: string, role: "admin" | "staff") {
   }
 
   try {
-    await adminDb.collection("users").doc(uid).update({
+    // Capture admin status BEFORE update so we can detect a flip.
+    const docRef = adminDb.collection("users").doc(uid);
+    const before = await docRef.get();
+    const beforeData = before.data() ?? {};
+    const wasAdmin = beforeData.role === "admin" && beforeData.disabled !== true;
+
+    // 1. Firestore (source of truth) first.
+    await docRef.update({
       role,
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: session.uid,
     });
+
+    // 2. Mirror to Auth custom claims (inlined Function 1).
+    await adminAuth.setCustomUserClaims(uid, { role });
+
+    // 3. Revoke refresh tokens so the user re-fetches an ID token with the
+    //    new claim on their next request (AUTH-09 immediate effect).
+    await adminAuth.revokeRefreshTokens(uid);
+
+    // 4. If admin status flipped, recompute event.allowedStaff across all
+    //    events (inlined Function 2 — was `onUserRoleChange`).
+    const isNowAdmin = role === "admin" && beforeData.disabled !== true;
+    if (wasAdmin !== isNowAdmin) {
+      await recomputeAllowedStaffForAllEvents();
+      revalidatePath("/events");
+    }
+
     revalidatePath("/users");
     return { ok: true as const };
   } catch (err) {
@@ -133,6 +180,10 @@ export async function setUserRole(uid: string, role: "admin" | "staff") {
 
 /**
  * disableUser — AUTH-09. Toggles Auth.disabled + Firestore.disabled + revokes sessions.
+ *
+ * Also inlines the admin-status-flip side of Function 2: if disabling an
+ * admin (or re-enabling one), the user's effective admin-ness changes,
+ * so every event's allowedStaff must be recomputed.
  */
 export async function disableUser(uid: string, disabled: boolean) {
   const session = await requireAdmin();
@@ -142,18 +193,33 @@ export async function disableUser(uid: string, disabled: boolean) {
   }
 
   try {
-    // 1. Toggle the Firebase Auth user (blocks NEW sign-ins)
+    // Capture admin status BEFORE so we can detect a flip via disable.
+    const docRef = adminDb.collection("users").doc(uid);
+    const before = await docRef.get();
+    const beforeData = before.data() ?? {};
+    const wasAdmin = beforeData.role === "admin" && beforeData.disabled !== true;
+
+    // 1. Toggle the Firebase Auth user (blocks NEW sign-ins).
     await adminAuth.updateUser(uid, { disabled });
 
-    // 2. Toggle the Firestore doc (DAL re-checks this on every request)
-    await adminDb.collection("users").doc(uid).update({
+    // 2. Toggle the Firestore doc (DAL re-checks this on every request).
+    await docRef.update({
       disabled,
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: session.uid,
     });
 
-    // 3. Revoke EXISTING sessions explicitly (AUTH-09)
+    // 3. Revoke EXISTING sessions explicitly (AUTH-09).
     if (disabled) await adminAuth.revokeRefreshTokens(uid);
+
+    // 4. Admin status may have flipped — recompute allowedStaff
+    //    (inlined Function 2). An admin being disabled = no longer admin;
+    //    an admin being re-enabled = admin again.
+    const isNowAdmin = beforeData.role === "admin" && !disabled;
+    if (wasAdmin !== isNowAdmin) {
+      await recomputeAllowedStaffForAllEvents();
+      revalidatePath("/events");
+    }
 
     revalidatePath("/users");
     return { ok: true as const };
