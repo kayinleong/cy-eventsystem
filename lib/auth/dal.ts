@@ -15,7 +15,7 @@
 
 import "server-only";
 import { cookies } from "next/headers";
-import { redirect, unauthorized } from "next/navigation";
+import { redirect } from "next/navigation";
 import { cache } from "react";
 import { getTokens } from "next-firebase-auth-edge";
 import { adminAuth, adminDb } from "@/lib/firebase/admin";
@@ -120,9 +120,14 @@ export async function requireSession(): Promise<Session> {
 /**
  * Redirects to /unauthorized when the session is not an admin.
  * Use at the top of admin-only routes (/users, /inventory/new, etc.).
+ *
+ * Note: we use redirect("/unauthorized") (stable since Next 13) rather than
+ * unauthorized() (experimental Next 16, requires experimental.authInterrupts).
+ * The existing /unauthorized page from Phase 1 already renders the
+ * "you don't have access" UI.
  */
 export async function requireAdmin(): Promise<Session> {
   const session = await requireSession();
-  if (session.role !== "admin") unauthorized();
+  if (session.role !== "admin") redirect("/unauthorized");
   return session;
 }
