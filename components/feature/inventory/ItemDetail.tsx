@@ -28,6 +28,7 @@ import {
   statusToLabel,
 } from "@/components/feature/status/status-to-tone";
 import type { InventoryItem } from "@/lib/types/item";
+import { AdjustStockDialog } from "./AdjustStockDialog";
 import { ItemHistoryTab } from "./ItemHistoryTab";
 import { PrintLabelButton } from "./PrintLabelButton";
 import { RetireItemButton } from "./RetireItemButton";
@@ -49,15 +50,28 @@ export function ItemDetail({
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-lg font-semibold">{item.name}</h1>
-            <StatusBadge tone={statusToTone(item.lifecycleState)}>
-              {statusToLabel(item.lifecycleState)}
-            </StatusBadge>
+        <div className="flex items-start gap-4">
+          {item.photoUrl ? (
+            // Plain <img> for Firebase Storage download URLs — bucket host
+            // is dynamic per project; avoids next.config.ts remotePatterns
+            // plumbing. Storage rules gate read to signed-in users (D-13).
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={item.photoUrl}
+              alt=""
+              className="size-20 rounded-md object-cover border"
+            />
+          ) : null}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg font-semibold">{item.name}</h1>
+              <StatusBadge tone={statusToTone(item.lifecycleState)}>
+                {statusToLabel(item.lifecycleState)}
+              </StatusBadge>
+            </div>
+            <p className="font-mono text-sm text-muted-foreground">{item.sku}</p>
+            <p className="text-sm text-muted-foreground">{item.category}</p>
           </div>
-          <p className="font-mono text-sm text-muted-foreground">{item.sku}</p>
-          <p className="text-sm text-muted-foreground">{item.category}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <PrintLabelButton sku={item.sku} name={item.name} />
@@ -68,6 +82,14 @@ export function ItemDetail({
                 Edit
               </Link>
             </Button>
+          ) : null}
+          {isAdmin ? (
+            <AdjustStockDialog
+              itemId={item.id}
+              itemName={item.name}
+              currentAvailable={item.availableQty}
+              currentTotal={item.totalQty}
+            />
           ) : null}
           {isAdmin ? (
             <RetireItemButton itemId={item.id} itemName={item.name} />

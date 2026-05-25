@@ -1,12 +1,18 @@
-// Phase 1 — Item detail "History" tab.
+// Phase 2 — Item detail "History" tab (Block C UI swap).
 //
 // REQUIREMENTS:
 //   - AUD-02 — chronological transactions for the item (newest first)
-//   - AUD-01 — every row shows the actor's role at write-time (the denormalized
-//     `actorRoleAtTimeOfAction` snapshot from the transaction record)
+//   - AUD-01 — every row shows the actor's role at write-time (the
+//     denormalized `actorRoleAtTimeOfAction` snapshot from the transaction
+//     record)
 //
-// Subscribes to the mock store via useMockStore so any later mutation
-// (checkout, checkin, missing) re-renders the feed.
+// Phase 2 swap from Phase 1:
+//   - selectTransactionsForItem(useMockStore) → useTransactionsLive({itemId})
+//     (onSnapshot listener scoped to itemId via composite index
+//     transactions(itemId, at desc) — declared in firestore.indexes.json
+//     plan 02-02).
+//   - All filtered/ordered server-side; the hook returns up to 50 rows
+//     (D-20 listener scope).
 
 "use client";
 
@@ -14,8 +20,7 @@ import Link from "next/link";
 import { Activity } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
-import { useMockStore } from "@/lib/hooks/use-mock-store";
-import { selectTransactionsForItem } from "@/lib/mock/selectors";
+import { useTransactionsLive } from "@/lib/hooks/use-transactions-live";
 import { StatusBadge } from "@/components/feature/status/StatusBadge";
 import {
   statusToTone,
@@ -39,7 +44,7 @@ function actionVerb(type: string): string {
 }
 
 export function ItemHistoryTab({ itemId }: { itemId: string }) {
-  const txs = useMockStore((s) => selectTransactionsForItem(s, itemId));
+  const txs = useTransactionsLive({ itemId, limit: 50 });
 
   if (txs.length === 0) {
     return (

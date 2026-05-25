@@ -1,8 +1,10 @@
-// Phase 1 — Destructive confirm to retire an inventory item.
+// Phase 2 — Destructive confirm to retire an inventory item (Block C UI swap).
 //
 // REQUIREMENTS:
-//   - INV-05 — admins can retire items (soft delete: lifecycleState = "retired").
+//   - INV-05 — admins can retire items (soft delete: lifecycleState=retired).
 //   - AUTH-10 — staff never see this button (admin-only at the UI layer).
+//   - PITFALLS C5 — Server Action refuses retire when outQty > 0; surface
+//     the ITEM_OUT error via toast so the admin understands why.
 //
 // UI-SPEC locked copy (Q9 destructive confirmations table):
 //   - Title: "Retire this item?"
@@ -10,10 +12,17 @@
 //             scans or events. Past history is kept."
 //   - Confirm label: "Retire item"
 //
-// Toast pattern: "Item retired" (UI-SPEC action toast verb-noun-past-tense).
+// Phase 2 swap from Phase 1:
+//   - retireItem mock-store mutator → Server Action from
+//     app/(app)/inventory/actions.ts. Actor lookup (mock-user resolution +
+//     useCurrentUser) DELETED — Server Action derives actor server-side.
+//   - Surface ITEM_OUT and ITEM_NOT_FOUND errors via toast.error.
+//   - router.refresh() after success (Server Action's revalidatePath
+//     already invalidates the route; refresh is defense-in-depth).
 
 "use client";
 
+import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -30,8 +39,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { retireItem } from "@/lib/mock/store";
-import { seedUsers } from "@/lib/mock/users";
+import { retireItem } from "@/app/(app)/inventory/actions";
 import { useCurrentUser } from "@/lib/hooks/use-current-user";
 
 export function RetireItemButton({
@@ -43,22 +51,24 @@ export function RetireItemButton({
 }) {
   const router = useRouter();
   const session = useCurrentUser();
+  const [pending, startTransition] = useTransition();
 
-  // Defense-in-depth at the UI layer; the layout-level requireAdmin() on the
-  // edit/new routes is the server gate. This button can render inside a
-  // detail page that ANY signed-in user can reach, so we must gate at render.
+  // Defense-in-depth at the UI layer; the Server Action enforces admin via
+  // requireAdmin(). This button can render inside a detail page that any
+  // signed-in user can reach, so we gate at render too.
   if (session?.role !== "admin") return null;
 
   function confirmRetire() {
-    const actor = seedUsers.find((u) => u.uid === session?.uid);
-    if (!actor) {
-      toast.error("Couldn't retire item");
-      return;
-    }
-    retireItem(itemId, actor);
-    toast(`${itemName} retired`);
-    router.push("/inventory");
-    router.refresh();
+    startTransition(async () => {
+      const res = await retireItem(itemId);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`${itemName} retired`);
+      router.push("/inventory");
+      router.refresh();
+    });
   }
 
   return (
@@ -77,12 +87,13 @@ export function RetireItemButton({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             onClick={confirmRetire}
+            disabled={pending}
           >
-            Retire item
+            {pending ? "Retiring…" : "Retire item"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

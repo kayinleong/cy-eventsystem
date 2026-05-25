@@ -1,15 +1,28 @@
-// Phase 1 — Shared ItemForm for /inventory/new (create) and /inventory/[id]/edit.
-//
-// Uses shadcn v4 <Field> primitives per Plans 01 (D-01-01-A) + 04 (D-01-04-B):
-// the legacy v3 <Form> / <FormField> Context wrapper is empty in the radix-nova
-// registry. We bind react-hook-form's `register` / `setValue` directly to the
-// shadcn primitives inside <Field>.
+// Phase 2 — Shared ItemForm for /inventory/new (create) and
+// /inventory/[id]/edit (Block C UI swap, plan 02-06).
 //
 // REQUIREMENTS:
-//   - INV-01 — create item: name + sku + category + totalQty + unit + photoUrl + notes + lowStockThreshold.
-//   - INV-02 — SKU uniqueness enforced client-side via getSnapshot() lookup.
+//   - INV-01 — create item: name + sku + category + totalQty + unit + photoUrl
+//     + notes + lowStockThreshold.
+//   - INV-02 — SKU uniqueness enforced server-side in createItem
+//     (tx.get(docRef).exists assert returns SKU_EXISTS); surfaced inline
+//     via setError("sku", ...).
 //   - INV-03 — edit item: same fields except sku + totalQty (locked).
-//   - INV-04 — stock-adjust flow is Phase 2; edit form does NOT mutate totalQty.
+//   - INV-04 — stock-adjust flow is the AdjustStockDialog; edit form does
+//     NOT mutate totalQty.
+//   - D-15 — UI surface amendment: BOTH /new AND /edit forms gain a photo
+//     field (ItemPhotoField — file picker + Take photo) compared to Phase 1.
+//
+// Phase 2 swap from Phase 1:
+//   - createItem / updateItem mock-store mutators → Server Actions from
+//     app/(app)/inventory/actions.ts.
+//   - Actor lookup (mock-user resolution + useCurrentUser) DELETED — Server
+//     Actions derive actor from verifySession() server-side per CONTEXT.md.
+//   - getSnapshot() SKU collision check DELETED — moved into the Server
+//     Action's runTransaction (atomic, race-safe).
+//   - photoUrl text input REPLACED with ItemPhotoField (D-15).
+//   - router.refresh() after successful mutation (Server Action already
+//     calls revalidatePath; client refresh is defense-in-depth).
 
 "use client";
 
@@ -24,9 +37,10 @@ import {
   ItemCategoryEnum,
   type ItemFormInput,
 } from "@/lib/schemas/item";
-import { createItem, updateItem, getSnapshot } from "@/lib/mock/store";
-import { seedUsers } from "@/lib/mock/users";
-import { useCurrentUser } from "@/lib/hooks/use-current-user";
+import {
+  createItem,
+  updateItem,
+} from "@/app/(app)/inventory/actions";
 import {
   Field,
   FieldGroup,
@@ -43,6 +57,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { ItemPhotoField } from "./ItemPhotoField";
 
 export type ItemFormProps =
   | { mode: "create"; initial?: ItemFormInput; itemId?: undefined }
@@ -51,14 +66,20 @@ export type ItemFormProps =
 export function ItemForm(props: ItemFormProps) {
   const { mode, initial, itemId } = props;
   const router = useRouter();
-  const session = useCurrentUser();
   const [submitting, setSubmitting] = useState(false);
+  // Photo URL is managed outside react-hook-form so the ItemPhotoField can
+  // surface upload progress + permission errors via local state. The final
+  // value is folded into the action payload at submit time.
+  const [photoUrl, setPhotoUrl] = useState<string | null>(
+    initial?.photoUrl && initial.photoUrl !== "" ? initial.photoUrl : null,
+  );
 
   const {
     register,
     handleSubmit,
     setError,
     control,
+    watch,
     formState: { errors },
   } = useForm<ItemFormInput>({
     resolver: zodResolver(ItemFormSchema),
@@ -76,69 +97,75 @@ export function ItemForm(props: ItemFormProps) {
       },
   });
 
-  function onSubmit(values: ItemFormInput) {
-    const actor = session
-      ? seedUsers.find((u) => u.uid === session.uid)
-      : undefined;
-    if (!actor) {
-      toast.error("Couldn't save changes");
-      return;
-    }
+  // For new items, the photo upload helper needs the itemId (== SKU). We
+  // gate the ItemPhotoField until the user has entered a non-empty SKU.
+  // For edit mode, the itemId is fixed and the photo field always renders.
+  const skuValue = watch("sku") ?? "";
+  const photoItemId =
+    mode === "edit" && itemId ? itemId : skuValue.trim().toUpperCase();
+  const photoEnabled = photoItemId.length > 0;
 
-    // Normalize photoUrl: schema accepts URL | null | "" — store wants string|null.
-    const normalizedPhotoUrl =
-      values.photoUrl && values.photoUrl !== "" ? values.photoUrl : null;
-
-    if (mode === "create") {
-      // INV-02 — SKU uniqueness check before mutating.
-      const existing = getSnapshot().items.find(
-        (i) => i.sku.toLowerCase() === values.sku.toLowerCase(),
-      );
-      if (existing) {
-        setError("sku", {
-          message: "An item with this SKU already exists.",
-        });
-        return;
-      }
-      setSubmitting(true);
-      const created = createItem(
-        {
+  async function onSubmit(values: ItemFormInput) {
+    setSubmitting(true);
+    try {
+      if (mode === "create") {
+        const res = await createItem({
           name: values.name,
           sku: values.sku.toUpperCase(),
           category: values.category,
           totalQty: values.totalQty,
           unit: values.unit ?? "pcs",
-          photoUrl: normalizedPhotoUrl,
           notes: values.notes ?? "",
           lowStockThreshold: values.lowStockThreshold ?? 0,
-        },
-        actor,
-      );
-      toast.success("Item added");
-      // PROJECT.md key decision #14 — id === sku, so route via the new id.
-      router.push(`/inventory/${created.id}`);
-      router.refresh();
-    } else if (itemId) {
-      setSubmitting(true);
-      updateItem(
-        itemId,
-        {
+          photoUrl: photoUrl ?? null,
+        });
+        if (!res.ok) {
+          if (res.errors) {
+            for (const [k, msgs] of Object.entries(res.errors)) {
+              if (msgs && msgs.length > 0) {
+                setError(k as keyof ItemFormInput, { message: msgs[0] });
+              }
+            }
+          }
+          // Surface non-field errors (e.g. SKU_EXISTS) inline + via toast.
+          if (!res.errors || Object.keys(res.errors).length === 0) {
+            toast.error(res.error ?? "Couldn't save — try again.");
+          }
+          return;
+        }
+        toast.success("Item added");
+        router.push(`/inventory/${res.itemId}`);
+        router.refresh();
+      } else if (itemId) {
+        const res = await updateItem(itemId, {
           name: values.name,
           category: values.category,
           unit: values.unit ?? "pcs",
-          photoUrl: normalizedPhotoUrl,
           notes: values.notes ?? "",
           lowStockThreshold: values.lowStockThreshold ?? 0,
-          // INV-04: totalQty intentionally NOT updated here — adjusting stock
-          // requires the dedicated stock-adjust flow (Phase 2 surface).
-        },
-        actor,
-      );
-      toast.success("Item updated");
-      router.push(`/inventory/${itemId}`);
-      router.refresh();
+          photoUrl: photoUrl ?? null,
+          // INV-04: totalQty NOT updated here — use AdjustStockDialog.
+        });
+        if (!res.ok) {
+          if (res.errors) {
+            for (const [k, msgs] of Object.entries(res.errors)) {
+              if (msgs && msgs.length > 0) {
+                setError(k as keyof ItemFormInput, { message: msgs[0] });
+              }
+            }
+          }
+          if (!res.errors || Object.keys(res.errors).length === 0) {
+            toast.error(res.error ?? "Couldn't save — try again.");
+          }
+          return;
+        }
+        toast.success("Item updated");
+        router.push(`/inventory/${itemId}`);
+        router.refresh();
+      }
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   }
 
   return (
@@ -263,22 +290,22 @@ export function ItemForm(props: ItemFormProps) {
           />
         </Field>
 
-        <Field data-invalid={!!errors.photoUrl}>
-          <FieldLabel htmlFor="item-photoUrl">Photo URL (optional)</FieldLabel>
-          <Input
-            id="item-photoUrl"
-            type="url"
-            placeholder="https://..."
-            aria-invalid={!!errors.photoUrl}
-            {...register("photoUrl")}
-          />
-          <FieldError
-            errors={
-              errors.photoUrl
-                ? [{ message: errors.photoUrl.message }]
-                : undefined
-            }
-          />
+        {/* D-15: photo field on both /inventory/new and /inventory/[id]/edit.
+            For NEW items, the SKU must be set first (the upload helper
+            writes to items/{sku}/photo.jpg). For EDIT, itemId is fixed. */}
+        <Field>
+          <FieldLabel>Photo (optional)</FieldLabel>
+          {photoEnabled ? (
+            <ItemPhotoField
+              itemId={photoItemId}
+              initialUrl={photoUrl}
+              onChange={setPhotoUrl}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Enter a SKU above to upload a photo.
+            </p>
+          )}
         </Field>
 
         <Field data-invalid={!!errors.notes}>
