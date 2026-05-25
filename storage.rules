@@ -1,13 +1,26 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    // Helper: read role from Firestore users/{uid} doc instead of the auth
+    // token's custom claim. We need this fallback because the Web SDK's ID
+    // token sometimes lacks the role=admin custom claim even after Cloud
+    // Function 1 sets it (race between token issuance and claim propagation;
+    // Web SDK only refreshes hourly unless getIdToken(true) is called).
+    // The Firestore users doc is authoritative (Server Action / seed script
+    // always writes it), so reading it here is a strict source of truth.
+    // Cost: one extra Firestore read per Storage write — acceptable for the
+    // low-frequency photo upload path.
+    function isAdminViaFirestore() {
+      return request.auth != null
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
     // D-13: inventory item photos — admin-only write, signed-in read.
     // T-02-02-11 (anonymous photo bucket browse) mitigation.
     // T-02-02-12 (non-image upload + DoS) mitigation: 5MB + content-type.
     match /items/{itemId}/photo.jpg {
       allow read: if request.auth != null;
-      allow write: if request.auth != null
-                   && request.auth.token.role == 'admin'
+      allow write: if isAdminViaFirestore()
                    && request.resource.size < 5 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*');
     }

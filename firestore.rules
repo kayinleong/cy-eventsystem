@@ -7,11 +7,22 @@ service cloud.firestore {
       return request.auth != null;
     }
     function isAdmin() {
-      return isSignedIn() && request.auth.token.role == 'admin';
+      // Two paths to "admin":
+      //   (a) The ID token carries role=admin custom claim (set by Cloud
+      //       Function 1 on users/{uid} writes — propagates within ~1h or
+      //       on getIdToken(true)).
+      //   (b) Fallback: the Firestore users/{uid} doc says role=admin.
+      // The fallback handles the window where claims haven't propagated to
+      // the Web SDK's token yet but the doc has been authoritatively written.
+      // Cost: ≤1 extra doc read per evaluation, only when token path misses.
+      return isSignedIn() && (
+        request.auth.token.role == 'admin'
+        || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+      );
     }
     function isMember(eventDoc) {
       return isSignedIn() && (
-        request.auth.token.role == 'admin'
+        isAdmin()
         || request.auth.uid in eventDoc.data.allowedStaff
       );
     }
