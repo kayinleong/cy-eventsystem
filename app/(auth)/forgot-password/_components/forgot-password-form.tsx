@@ -1,16 +1,20 @@
 // /forgot-password client form — react-hook-form + Zod 4 + shadcn v4 <Field>.
 //
-// AUTH-03 — Phase 1 no-op submit (toast + redirect to /login).
-// Phase 2: calls Firebase generatePasswordResetLink with the form email.
+// AUTH-03 — Firebase sendPasswordResetEmail (Web SDK). Firebase auto-sends
+// the password reset email via the default template (Auth Console →
+// Templates → "Password reset") per D-07. We never differentiate between
+// "user not found" and other errors — the success branch always renders
+// the same generic copy (T-02-03-01 — anti-enumeration per RESEARCH §1.9).
 
 "use client";
 
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
+import { sendPasswordResetEmail } from "firebase/auth";
 import Link from "next/link";
-import { toast } from "sonner";
 
+import { auth } from "@/lib/firebase/client";
 import {
   ForgotPasswordSchema,
   type ForgotPasswordInput,
@@ -25,7 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 export function ForgotPasswordForm() {
-  const router = useRouter();
+  const [sent, setSent] = useState(false);
   const {
     register,
     handleSubmit,
@@ -36,13 +40,34 @@ export function ForgotPasswordForm() {
     defaultValues: { email: "" },
   });
 
-  function onSubmit(values: ForgotPasswordInput) {
-    // Phase 1: no-op; Phase 2 calls Firebase generatePasswordResetLink with
-    // `values.email`. We reference `values` here to document the Phase 2 swap
-    // surface and to avoid the no-unused-vars lint rule.
-    void values;
-    toast.success("Reset link sent");
-    router.push("/login");
+  async function onSubmit(values: ForgotPasswordInput) {
+    // T-02-03-01: do NOT differentiate user-not-found from network errors.
+    // Always advance to the generic-success branch regardless of outcome.
+    try {
+      await sendPasswordResetEmail(auth, values.email);
+    } catch {
+      // Swallow — Firebase rate-limits + spam protection live at the API.
+    }
+    setSent(true);
+  }
+
+  if (sent) {
+    return (
+      <div className="space-y-3 text-sm">
+        <p>If an account exists for that email, a reset link has been sent.</p>
+        <p className="text-muted-foreground">
+          Check your inbox and spam folder. The link expires in 1 hour.
+        </p>
+        <div className="text-center">
+          <Link
+            href="/login"
+            className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            Back to sign in
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -66,7 +91,7 @@ export function ForgotPasswordForm() {
       </FieldGroup>
 
       <Button type="submit" className="w-full" disabled={isSubmitting}>
-        Send reset link
+        {isSubmitting ? "Sending…" : "Send reset link"}
       </Button>
 
       <div className="text-center">

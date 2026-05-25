@@ -1,16 +1,32 @@
 // /set-password client form — react-hook-form + Zod 4 + shadcn v4 <Field>.
 //
-// AUTH-04 — Phase 1 no-op submit (toast + redirect to /login).
-// The schema enforces confirmPassword === password (lib/schemas/auth.ts).
-// Phase 2: signed-link verification + Firebase updatePassword.
+// AUTH-04 — completes password reset / invite flow via Firebase oobCode.
+//
+// Flow (D-08 auto-sign-in):
+//   1. Page mounts → useEffect verifies the oobCode via verifyPasswordResetCode.
+//      If invalid/expired → render "expired link" copy with a link to retry.
+//   2. User submits new password → verifyPasswordResetCode again (returns
+//      email, which we need for signInWithEmailAndPassword) → confirmPasswordReset
+//      → signInWithEmailAndPassword with the just-set credentials → POST
+//      ID token to /api/auth/session → hard-nav to "/".
+//
+// T-02-03-03 (forged oobCode): Firebase Auth verifies the code; invalid
+// codes surface via the codeError branch.
 
 "use client";
 
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import {
+  verifyPasswordResetCode,
+  confirmPasswordReset,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 
+import { auth } from "@/lib/firebase/client";
 import {
   SetPasswordSchema,
   type SetPasswordInput,
@@ -25,10 +41,16 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 export function SetPasswordForm() {
-  const router = useRouter();
+  const searchParams = useSearchParams();
+  const oobCode = searchParams?.get("oobCode") ?? null;
+
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [verifyingCode, setVerifyingCode] = useState(true);
+
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<SetPasswordInput>({
     resolver: zodResolver(SetPasswordSchema),
@@ -36,13 +58,76 @@ export function SetPasswordForm() {
     defaultValues: { password: "", confirmPassword: "" },
   });
 
-  function onSubmit(values: SetPasswordInput) {
-    // Phase 1: no-op; Phase 2 calls Firebase updatePassword via signed-link
-    // verification using `values.password`. We reference `values` here to
-    // document the Phase 2 swap surface and to avoid no-unused-vars.
-    void values;
-    toast.success("Password updated");
-    router.push("/login");
+  // Verify the oobCode on mount so we can show "expired link" copy if
+  // the user followed an invalid/used reset link.
+  useEffect(() => {
+    if (!oobCode) {
+      setCodeError("This link is invalid. Request a new one.");
+      setVerifyingCode(false);
+      return;
+    }
+    verifyPasswordResetCode(auth, oobCode)
+      .then(() => {
+        setVerifyingCode(false);
+      })
+      .catch(() => {
+        setCodeError("This link has expired or has already been used. Request a new one.");
+        setVerifyingCode(false);
+      });
+  }, [oobCode]);
+
+  async function onSubmit(values: SetPasswordInput) {
+    if (!oobCode) return;
+    try {
+      // 1. Re-verify the oobCode to extract the email associated with it.
+      //    verifyPasswordResetCode returns the user's email — we need it
+      //    for the auto-sign-in step below (D-08).
+      const email = await verifyPasswordResetCode(auth, oobCode);
+
+      // 2. Apply the new password. After this point the oobCode is consumed.
+      await confirmPasswordReset(auth, oobCode, values.password);
+
+      // 3. D-08 auto-sign-in: sign the user in with the credentials they
+      //    just set, then mint the session cookie.
+      const cred = await signInWithEmailAndPassword(auth, email, values.password);
+      const idToken = await cred.user.getIdToken();
+      const res = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      if (!res.ok) throw new Error("session-create-failed");
+
+      // 4. Hard nav so proxy.ts re-evaluates with the new cookie.
+      window.location.assign("/");
+    } catch {
+      setError("password", {
+        message: "Couldn't set your password. Try again or request a new link.",
+      });
+    }
+  }
+
+  if (verifyingCode) {
+    return (
+      <p className="text-center text-sm text-muted-foreground">
+        Verifying link…
+      </p>
+    );
+  }
+
+  if (codeError) {
+    return (
+      <div className="space-y-3 text-sm">
+        <p role="alert" className="text-destructive">{codeError}</p>
+        <div className="text-center">
+          <Link
+            href="/forgot-password"
+            className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+          >
+            Request a new link
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -77,8 +162,8 @@ export function SetPasswordForm() {
         </Field>
       </FieldGroup>
 
-      <Button type="submit" className="w-full" disabled={isSubmitting}>
-        Update password
+      <Button type="submit" className="w-full" disabled={isSubmitting || !oobCode}>
+        {isSubmitting ? "Setting password…" : "Set password"}
       </Button>
     </form>
   );
