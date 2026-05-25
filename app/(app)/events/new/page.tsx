@@ -1,23 +1,24 @@
-// Phase 1 — /events/new admin-gated create form route.
+// Phase 2 — /events/new create form route (Block D UI swap, plan 02-07).
 //
 // REQUIREMENTS:
-//   - EVT-01 — admins (and in Phase 2 also team leads) can create events.
+//   - EVT-01 — any signed-in user can attempt create; the Server Action
+//     (createEvent in @/app/(app)/events/actions) gates further: admin OR
+//     the requester must name themselves in teamLeads.
 //
-// CONTEXT.md D-07 — Phase 1 keeps `/events/new` strictly admin-only. The
-// REQUIREMENTS allow team-lead creation in Phase 2; Phase 1 mirrors the
-// strict /inventory/new gate so role-aware UI is testable end-to-end with the
-// PhaseOnePocRoleSwitcher.
+// Phase 1 used `requireAdmin` here (admin-only). Phase 2 broadens the page
+// gate to `requireSession` per EVT-01 + canEditEvent semantics — team leads
+// can self-create. The Server Action remains the security boundary.
 
 import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/ui/page-header";
-import { requireAdmin } from "@/lib/auth/mock-session";
+import { requireSession } from "@/lib/auth/dal";
 import { EventForm } from "@/components/feature/events/EventForm";
 
 export const metadata: Metadata = { title: "Create event" };
 
 export default async function NewEventPage() {
-  await requireAdmin();
+  await requireSession();
   return (
     <div className="space-y-6">
       <PageHeader title="Create event" description="Schedule a new event." />

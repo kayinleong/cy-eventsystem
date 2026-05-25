@@ -1,19 +1,26 @@
-// Phase 1 — /events list page.
+// Phase 2 — /events list page (Block D UI swap, plan 02-07).
 //
-// Server-Component shell that hands off to the client `EventsTable` island.
-// The role-gate from (app)/layout.tsx (Plan 04) has already enforced auth at
-// this point; per D-07, /events/new is admin-only, so we gate the "Create
-// event" CTA on session.role === "admin" too (mirrors the inventory shell).
+// Server-Component shell that:
+//   - Verifies the session via the real DAL (requireSession redirects to
+//     /api/auth/expire-session if the __session cookie is missing/invalid).
+//   - Issues a cursor-paged Admin SDK read via getEventsPage (50-row slice
+//     per D-20). EVT-08 enforced server-side — staff only see events whose
+//     allowedStaff array contains their uid; admin sees all.
+//   - Hands off `events`, `nextCursor`, and the full `session` to the
+//     client EventsTable, which subscribes to the same window via
+//     onSnapshot (Web SDK) for live updates.
+//   - Surfaces a "Create event" CTA (EVT-01 — any signed-in user can in
+//     principle create; the Server Action narrows to admin OR self-team-lead).
 //
-// URL state (q, status, page, sort) lives inside the client table via
-// `useUrlTableState` (Plan 03). No prop drilling.
+// URL contract per D-17: `?cursor=xxx` opaque base64 JSON blob replaces
+// Phase 1's `?page=N`. Filter URL params (`?status=`) survive unchanged per
+// REP-06.
 //
 // REQUIREMENTS:
-//   - EVT-03 — filterable list, default filter status=active, sortable by startDate
-//   - EVT-08 — staff sees only events where uid ∈ allowedStaff (enforced inside
-//              EventsTable via selectAccessibleEvents)
-//   - REP-06 — shareable filter URLs (DataTable + useUrlTableState)
-//   - REP-07 — 50 rows/page default
+//   - EVT-03 — filterable list, default filter status=active
+//   - EVT-08 — staff sees only events where uid ∈ allowedStaff
+//   - REP-06 — shareable filter URLs
+//   - REP-07 — 50 rows/page (the cursor window size)
 
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -21,36 +28,56 @@ import { Plus } from "lucide-react";
 
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import { requireSession } from "@/lib/auth/mock-session";
+import { requireSession } from "@/lib/auth/dal";
+import { getEventsPage } from "@/lib/data/events.server";
 import { EventsTable } from "@/components/feature/events/EventsTable";
 
 export const metadata: Metadata = { title: "Events" };
 
-export default async function EventsListPage() {
-  // Read session server-side so the table can render the EVT-08 access
-  // projection on the SSR pass (no empty-then-fill flash on first paint).
-  // The (app) layout already enforced auth, but call requireSession() here
-  // to narrow `session.uid` + `session.role` to non-nullable for the prop
-  // hand-off below — also defensive against direct route invocation.
+type RouteProps = {
+  searchParams: Promise<{
+    cursor?: string;
+    status?: string;
+  }>;
+};
+
+export default async function EventsListPage({ searchParams }: RouteProps) {
+  // Defense-in-depth: the (app) layout already gated auth; requireSession
+  // here narrows session for the SSR seed below.
   const session = await requireSession();
-  const isAdmin = session.role === "admin";
+
+  const params = await searchParams; // Next 16 async
+  // EVT-03 default = "active" when no explicit filter; "_all" disables the
+  // status filter entirely so users can browse every status they're allowed
+  // to see.
+  const statusParam = params.status ?? "active";
+  const statusFilter = statusParam === "_all" ? undefined : statusParam;
+
+  const { events, nextCursor } = await getEventsPage({
+    cursor: params.cursor ?? null,
+    filters: { status: statusFilter },
+    session,
+  });
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Events"
         description="Plan, run, and close out events."
         action={
-          isAdmin ? (
-            <Button asChild>
-              <Link href="/events/new">
-                <Plus className="mr-2 size-4" />
-                Create event
-              </Link>
-            </Button>
-          ) : null
+          <Button asChild>
+            <Link href="/events/new">
+              <Plus className="mr-2 size-4" />
+              Create event
+            </Link>
+          </Button>
         }
       />
-      <EventsTable uid={session.uid} role={session.role} />
+      <EventsTable
+        initialEvents={events}
+        nextCursor={nextCursor}
+        session={session}
+      />
     </div>
   );
 }
