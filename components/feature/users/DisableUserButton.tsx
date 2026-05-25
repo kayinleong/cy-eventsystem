@@ -1,4 +1,4 @@
-// Phase 2 — Disable user destructive button.
+// Phase 2 — User status toggle (Disable + Enable).
 //
 // REQUIREMENTS:
 //   - AUTH-09 — admins can disable a user; disabled users lose access and
@@ -6,20 +6,19 @@
 //     The disableUser Server Action revokes refresh tokens so existing
 //     sessions die on next request; the DAL re-checks Firestore.disabled
 //     on every authenticated request.
+//   - Re-enable is supported (admin restores access by setting Auth.disabled
+//     = false + Firestore.disabled = false). Non-destructive — no confirm
+//     dialog. The re-enabled user must sign in fresh.
 //   - UI-SPEC Q9 — destructive confirmation uses <AlertDialog/> (NOT <Dialog/>).
 //     Title: "Disable this user?". Body: "They lose access immediately. Their
 //     past activity stays in reports." Confirm label: "Disable user" (verb-noun,
 //     never "OK").
-//
-// Phase 1 used the mock store + a client-side actor lookup. Phase 2 calls
-// the disableUser Server Action which derives the actor server-side via
-// requireAdmin() — no client-side lookup, no actor arg.
 
 "use client";
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Ban } from "lucide-react";
+import { Ban, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -47,9 +46,8 @@ export function DisableUserButton({
 }) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
-  if (alreadyDisabled) return null;
 
-  function confirm() {
+  function disable() {
     startTransition(async () => {
       const res = await disableUser(uid, true);
       if (!res.ok) {
@@ -57,10 +55,35 @@ export function DisableUserButton({
         return;
       }
       toast(`${displayName} disabled`);
-      // Force Server Component re-fetch so the table shows the disabled badge
-      // even if useUsersLive's onSnapshot listener is silenced.
       router.refresh();
     });
+  }
+
+  function enable() {
+    startTransition(async () => {
+      const res = await disableUser(uid, false);
+      if (!res.ok) {
+        toast.error(res.error ?? "Couldn't enable user");
+        return;
+      }
+      toast.success(`${displayName} enabled`);
+      router.refresh();
+    });
+  }
+
+  if (alreadyDisabled) {
+    // Re-enable is non-destructive — no confirm dialog. One-click action.
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={pending}
+        onClick={enable}
+      >
+        <UserCheck className="mr-2 size-4" />
+        Enable
+      </Button>
+    );
   }
 
   return (
@@ -80,7 +103,7 @@ export function DisableUserButton({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={confirm}>
+          <AlertDialogAction variant="destructive" onClick={disable}>
             Disable user
           </AlertDialogAction>
         </AlertDialogFooter>
