@@ -6,7 +6,7 @@
 - started: 2026-05-25
 - status: in-progress
 - summary: Functionality — wire Firebase Auth + Firestore + 2 Cloud Functions + Storage; replace every mock with real backend; UI surface frozen from Phase 1
-- current plan: 02-07 (TBD — next wave); 02-06 code complete (awaiting E2E + Block C rules audit); 02-04 deferred verifications still open
+- current plan: 02-07 (events data + actions + UI — Wave 7, Block D); 02-06 smoke approved; Cloud Functions removed and inlined into Server Actions per D-02 re-amendment
 
 ## What will change
 
