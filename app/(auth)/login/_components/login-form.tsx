@@ -53,8 +53,14 @@ export function LoginForm() {
         values.password,
       );
 
-      // 2. Get fresh ID token (forced refresh to ensure latest custom claims).
-      const idToken = await cred.user.getIdToken();
+      // 2. Get fresh ID token. Pass `true` to force-refresh from Firebase Auth
+      //    so the token carries the latest custom claims (e.g., role=admin
+      //    just set by the seed script or Cloud Function 1). Without the
+      //    force flag, getIdToken() may return a cached token issued before
+      //    the claims were set, which then fails Firestore rules on
+      //    collection-list queries (FINDINGS A1 fallout, surfaced by
+      //    useUsersLive permission-denied errors).
+      const idToken = await cred.user.getIdToken(true);
 
       // 3. POST to /api/auth/session — proxy.ts authMiddleware intercepts
       //    this path (loginPath) and mints the HMAC-signed __session cookie

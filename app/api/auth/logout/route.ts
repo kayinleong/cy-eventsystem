@@ -15,7 +15,7 @@
 
 import "server-only";
 import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { getTokens } from "next-firebase-auth-edge";
 import { adminAuth } from "@/lib/firebase/admin";
 
@@ -53,4 +53,42 @@ export async function POST(): Promise<Response> {
   }
 
   return new NextResponse(null, { status: 204 });
+}
+
+// GET /api/auth/logout — used by DAL.requireSession() to break the
+// login↔dashboard loop when the server detects a revoked session.
+//
+// The auth-edge __session cookie's HMAC remains valid after revokeRefreshTokens
+// (the proxy can't tell it apart from a fresh cookie without a Firebase
+// round-trip). So if requireSession redirects to /login directly, the proxy
+// sees the "valid" cookie and bounces the user back to / → infinite loop.
+//
+// This handler explicitly Set-Cookie's __session with Max-Age=0 BEFORE
+// redirecting, so the next request carries no cookie and the proxy routes
+// the user to /login cleanly.
+export async function GET(request: NextRequest): Promise<Response> {
+  const cookieStore = await cookies();
+
+  try {
+    const tokens = await getTokens(cookieStore, COOKIE_OPTS);
+    if (tokens?.decodedToken?.uid) {
+      await adminAuth.revokeRefreshTokens(tokens.decodedToken.uid);
+    }
+  } catch {
+    // idempotent — proceed to clear cookie regardless
+  }
+
+  const reason = request.nextUrl.searchParams.get("reason");
+  const url = new URL("/login", request.url);
+  if (reason) url.searchParams.set("reason", reason);
+
+  const response = NextResponse.redirect(url, 303);
+  response.cookies.set("__session", "", {
+    maxAge: 0,
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.USE_SECURE_COOKIES === "true",
+  });
+  return response;
 }

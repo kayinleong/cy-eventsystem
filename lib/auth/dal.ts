@@ -108,12 +108,20 @@ export const verifySession = cache(async (): Promise<Session | null> => {
 export const getSession = verifySession;
 
 /**
- * Redirects to /login when there's no valid session. Use at the top of
- * protected layouts / Server Actions.
+ * Redirects when there's no valid session. Use at the top of protected
+ * layouts / Server Actions.
+ *
+ * Redirects to /api/auth/logout (not /login directly) because the auth-edge
+ * __session cookie's HMAC remains valid after revokeRefreshTokens — the
+ * proxy can't tell a revoked session apart from a fresh one without a
+ * Firebase round-trip. Redirecting to /login with a "valid" cookie still
+ * present means the proxy bounces back to / → infinite loop.
+ * /api/auth/logout's GET handler clears the cookie via Set-Cookie before
+ * redirecting to /login, breaking the loop.
  */
 export async function requireSession(): Promise<Session> {
   const session = await verifySession();
-  if (!session) redirect("/login");
+  if (!session) redirect("/api/auth/logout?reason=session-invalid");
   return session;
 }
 

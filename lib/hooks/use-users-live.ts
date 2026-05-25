@@ -19,8 +19,9 @@ import {
   documentId,
   type DocumentSnapshot,
   type QuerySnapshot,
+  type FirestoreError,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase/client";
+import { auth, db } from "@/lib/firebase/client";
 import type { UserDoc } from "@/lib/types/user";
 
 function tsToIso(ts: unknown): string | null {
@@ -52,6 +53,9 @@ export function useUsersLive(
   opts: { role?: "admin" | "staff"; limit?: number } = {},
 ): UserDoc[] {
   const [users, setUsers] = useState<UserDoc[]>(initial);
+  // retryKey re-runs the effect after a forced token refresh on permission-denied.
+  // Capped at 1 retry so we don't hammer Firebase if claims are genuinely missing.
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const constraints = [
@@ -61,11 +65,46 @@ export function useUsersLive(
       fbLimit(opts.limit ?? 50),
     ];
     const q = query(collection(db, "users"), ...constraints);
-    const unsub = onSnapshot(q, (snap: QuerySnapshot) => {
-      setUsers(snap.docs.map(toUser));
-    });
+    const unsub = onSnapshot(
+      q,
+      (snap: QuerySnapshot) => {
+        setUsers(snap.docs.map(toUser));
+      },
+      (err: FirestoreError) => {
+        // Surface the error clearly — the default Firestore log says
+        // "Uncaught Error in snapshot listener" which obscures the cause.
+        console.error(
+          "[useUsersLive] onSnapshot error:",
+          err.code,
+          err.message,
+        );
+
+        // permission-denied on a users-collection list is almost always a
+        // stale ID token missing the role=admin custom claim. Force-refresh
+        // once and re-subscribe via retryKey.
+        if (err.code === "permission-denied" && retryKey < 1) {
+          const currentUser = auth.currentUser;
+          if (currentUser) {
+            currentUser
+              .getIdToken(true)
+              .then(() => {
+                console.info(
+                  "[useUsersLive] forced ID token refresh after permission-denied; re-subscribing…",
+                );
+                setRetryKey((k) => k + 1);
+              })
+              .catch((refreshErr) => {
+                console.error(
+                  "[useUsersLive] token refresh failed:",
+                  refreshErr,
+                );
+              });
+          }
+        }
+      },
+    );
     return () => unsub();
-  }, [opts.role, opts.limit]);
+  }, [opts.role, opts.limit, retryKey]);
 
   return users;
 }
