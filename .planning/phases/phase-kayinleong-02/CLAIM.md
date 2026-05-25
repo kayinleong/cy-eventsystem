@@ -6,7 +6,7 @@
 - started: 2026-05-25
 - status: in-progress
 - summary: Functionality — wire Firebase Auth + Firestore + 2 Cloud Functions + Storage; replace every mock with real backend; UI surface frozen from Phase 1
-- current plan: 02-02 (Firebase clients + DAL + proxy + rules/indexes/storage — Wave 2, Block A foundation)
+- current plan: 02-03 (auth pages wired — Wave 3, Block A foundation)
 
 ## What will change
 
@@ -60,7 +60,25 @@
 - Verification gates green: `tsc --noEmit` PASS, `npm run lint` PASS (1 pre-existing Phase 1 warning untouched), `npm run build` PASS (27 routes generated, proxy.ts recognized).
 - Admin SDK does NOT leak into client bundle (verified via grep `firebase-admin` in `.next/static/chunks/` returns empty — PITFALLS C6 mitigated).
 - Commits: `cd9d885` (clients), `2130aea` (DAL + proxy + routes), `1344a0f` (rules + indexes + storage + firebase.json), `ac5e1ad` (CHANGELOG), `26452f2` (admin.ts assertion fix), `e3a89a0` (SUMMARY).
-- **Plan 02-02 NOT YET MARKED FULLY DONE** — pending: (a) user runs `firebase deploy --only firestore:rules,firestore:indexes,storage`, (b) 5-row Rules Playground manual audit per D-06 with results recorded below under "## Rules Audit — Block A".
+- **Plan 02-02 complete (2026-05-25)** — user confirmed `firebase deploy --only firestore:rules,firestore:indexes,storage` succeeded + `npm run dev` smoke test PASSED (incognito → /login 307 redirect via proxy.ts). 5-row Rules Playground audit attested by user as PASS. See "## Rules Audit — Block A" below.
+
+## Rules Audit — Block A (plan 02-02 deploy gate, 2026-05-25)
+
+User-attested manual Firebase Console Rules Playground audit per D-06 mitigation (rules unit tests skipped in v1, replaced with manual audit per block):
+
+| # | Path | Auth | Op | Expected | Result |
+|---|------|------|-----|----------|--------|
+| 1 | `users/SOME_UID` | Unauthenticated | get | DENY | PASS (attested) |
+| 2 | `inventory/SKU-001` | Authenticated staff | get | ALLOW | PASS (attested) |
+| 3 | `inventory/SKU-001` | Authenticated staff | update | DENY (admin-only writes) | PASS (attested) |
+| 4 | `events/EVT-001` | Authenticated NOT in allowedStaff | get | DENY (array-contains-any gate) | PASS (attested) |
+| 5 | `transactions/TX-001` | Authenticated admin | create from client | DENY (server-only writes) | PASS (attested) |
+
+**Smoke test:** `npm run dev` → incognito http://localhost:3000 → 307 redirect to `/login` (proxy.ts cookie gate working). User-attested PASS.
+
+**Deploy command run:** `firebase deploy --only firestore:rules,firestore:indexes,storage` — succeeded, indexes READY/CREATING.
+
+**Note on audit attestation:** The 5 rows above are user-attested (the user manually ran the Playground tests during the smoke gate). Future plans (02-04..02-10) each have their own rules-touching audit checkpoint per D-06; results from those will append to this section as separate "Rules Audit — Block B/C/D/E/F/G" subsections.
 
 ## Verification
 
