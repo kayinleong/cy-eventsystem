@@ -166,6 +166,63 @@ User-attested manual Firebase Console Rules Playground audit per D-06 mitigation
 - See `.planning/phases/phase-kayinleong-02/02-06-inventory-ui-photo-and-cursor-SUMMARY.md`.
 - **Plan 02-06 gate:** awaiting end-to-end inventory smoke (create + photo + adjust + retire + cursor) + Block C rules audit (6 Firestore + 4 Storage Rules Playground cases) per SUMMARY.md CHECKPOINT section.
 
+### Plan 02-07 (events data layer + 3 Server Actions + UI swap — Wave 7, Block D) — code complete; E2E + Block D rules audit pending (2026-05-26)
+
+- `lib/schemas/event.ts` (MOD): added `CreateEventSchema` / `UpdateEventSchema` / `CancelEventReconciliationSchema` for Server Action input validation. Preserved `EventFormSchema` for the existing EventForm callers.
+- `lib/data/events.server.ts` (NEW): server-only Admin SDK reads with EVT-08 access projection. `getEventsPage({cursor, limit, filters, session})` — admin sees all, staff sees `array-contains` allowedStaff. `getEventServer(eventId, session)` — null for non-members (404 path). `getOpenCheckoutsForEventServer(eventId)` — checkouts whose id is not referenced as `parentTxId` by any check-in. Timestamp → ISO conversion preserves Phase 1 contract. Commit `a5c46ec`.
+- `lib/hooks/use-events-live.ts` (NEW): Web SDK `onSnapshot` scoped to 50-row window per D-20. EVT-08 `array-contains` filter mirrors the server projection. Subscription gated on `onAuthStateChanged`. Defensive FirestoreError console.error. Commit `a5c46ec`.
+- `app/(app)/events/actions.ts` (NEW): 3 Server Actions — `createEvent` (EVT-01; admin OR self-team-lead; seeds allowedStaff = admins ∪ teamLeads ∪ backupTeams then calls recomputeAllowedStaffForEvent), `updateEvent` (EVT-05; canEditEvent gate; calls recomputeAllowedStaffForEvent ONLY when teamLeads/backupTeams changed via sorted-array diff), `cancelEvent` (EVT-06; requireAdmin; single runTransaction reads all open checkouts + inventory docs up-front, groups deltas by itemId, writes per-item updates + per-checkout audit rows + missingItems docs for "lost" + flips event.status="cancelled" with closedAt/closedBy). isLowStock recomputed atomically per RESEARCH P11. revalidatePath matrix covers /events, /inventory, /reports/missing, /reports/out, /reports/stock, /. Commit `044cd95`.
+- `app/(app)/events/page.tsx` (MOD): real DAL (`requireSession`); SSR seed via `getEventsPage` with EVT-08 projection; `?cursor=` + `?status=` URL contract per D-17. Default status filter = "active" (EVT-03); "_all" sentinel disables. Commit `1618846`.
+- `components/feature/events/EventsTable.tsx` (MOD): bypass generic `<DataTable>` wrapper, drives `useReactTable({manualPagination: true, pageCount: -1})` directly; consumes `initialEvents + nextCursor + session` from SSR; `useEventsLive` for live updates; Prev/Next chrome (no page-N/M). All D-11 sortable-column rules preserved. `useMockStore` + `selectAccessibleEvents` removed. Commit `1618846`.
+- `app/(app)/events/new/page.tsx` (MOD): broadened gate `requireAdmin → requireSession` per EVT-01 (any signed-in user can attempt; Server Action enforces admin OR self-team-lead). SSR-seed users via `getUsersPage({limit:200})`. Commit `1618846` + `1f7a86b`.
+- `components/feature/events/EventForm.tsx` (MOD): `createEvent`/`updateEvent` Server Actions; field-level Zod errors via `rhf.setError`. Form layout preserved. Commit `1f7a86b`.
+- `components/feature/events/TeamLeadCombobox.tsx` + `components/feature/events/BackupTeamCombobox.tsx` (Rule 3 deviation): accept `users` as a prop instead of reading from `useMockStore`. SSR-seeded by parent pages (`/events/new`, `/events/[eventId]/edit`, `/events/[eventId]`). Commit `1f7a86b`.
+- `app/(app)/events/[eventId]/edit/page.tsx` (MOD): `requireSession` + `getEventServer` (EVT-08 enforced) + `canEditEvent` gate (EVT-05). `notFound()` on both missing-event AND access-denied paths for anti-enumeration. Users seeded via `getUsersPage`. Commit `1f7a86b`.
+- `app/(app)/events/[eventId]/page.tsx` (MOD): `requireSession + getEventServer` (EVT-08 enforced) + `canEditEvent` gate; SSR-seed users for team-member chip resolution. Commit `b1f0072`.
+- `components/feature/events/EventDetail.tsx` (MOD): accepts `event + users + isAdmin + canEdit` props from SSR. Removed mock-store users subscription. CancelEventDialog only renders for admin + non-terminal status. Commit `b1f0072`.
+- `components/feature/events/EventAssignedItemsTab.tsx` (MOD): `useTransactionsLive({eventId, limit:100})`; client-side derivation of open checkouts. Commit `b1f0072`.
+- `components/feature/events/EventHistoryTab.tsx` (MOD): `useTransactionsLive({eventId, limit:100})`; AUD-03 chronological + AUD-01 actor role display preserved. Commit `b1f0072`.
+- `components/feature/events/CancelEventDialog.tsx` (MOD): `cancelEvent` Server Action; reconciliation map keyed by transaction id (Rule 3 — Server Action's `CancelEventReconciliationSchema` keys by tx id, NOT itemId as Phase 1's mock contract did). Default "returned" for any open checkout the user doesn't explicitly change. Action disabled during submit. Commit `b1f0072`.
+- `app/(app)/page.tsx` (MOD): `requireSession` + SSR-seed active events via `getEventsPage({status:"active", limit:10})` then pass to both event widgets. EVT-08 enforced in seed. Commit `a1750c5`.
+- `components/feature/dashboard/ActiveEventsWidget.tsx` (MOD): `useEventsLive` scoped to `{status:"active", limit:10}`. Removed `selectActiveEvents` + `useMockStore`. Commit `a1750c5`.
+- `components/feature/dashboard/OverdueReturnsWidget.tsx` (MOD): `useEventsLive` + client-side filter `endDate < nowMs`. `nowMs` driven by `useSyncExternalStore` with 60s interval (Rule 1 — React 19 purity rule disallows `Date.now()` in render or synchronous `setState` in effect). Phase 1's PHASE_1_TODAY constant replaced. Commit `a1750c5`.
+- Deviations (all auto-fixed, see SUMMARY for full register):
+  - Rule 3 — comboboxes now take `users` as a prop instead of `useMockStore` (plan called for `useUsersLive` which is stubbed; SSR-seeding is the cleaner fix and is consistent with EventDetail's users prop).
+  - Rule 1 — `OverdueReturnsWidget` Date.now() purity violation → useSyncExternalStore pattern.
+  - Rule 3 — CancelEventDialog reconciliation map keyed by tx id (not itemId) to match Server Action contract.
+- Verification gates: `npx tsc --noEmit` PASS, `npm run lint` PASS (0 errors, 6 pre-existing `react-hooks/incompatible-library` warnings from TanStack + rhf — same set as plan 02-06), `npm run build` PASS (28 routes, proxy.ts recognized).
+- Architecture preserved: no `functions/` directory (stays deleted), no `firebase.json` functions block, no Cloud Function 2 references in code (only one historical doc comment in `app/(app)/events/actions.ts` explaining the inlined approach). `recomputeAllowedStaffForEvent` from `@/lib/data/allowed-staff.server` is the synchronous writer.
+- See `.planning/phases/phase-kayinleong-02/02-07-events-data-and-cloud-function-SUMMARY.md` for full details + deviation register + manual verification checkpoint instructions.
+- **Plan 02-07 gate:** awaiting end-to-end events smoke (create + edit + team-membership change + EVT-08 access + cancel reconciliation + admin promotion sweep) + Block D rules audit (8 cases) per SUMMARY.md CHECKPOINT section.
+
+## E2E Smoke + Block D Rules Audit — Plan 02-07 (awaiting attestation)
+
+To advance to plan 02-08, the user runs the following sequence and attests results here.
+
+### Smoke (6 rows)
+
+| # | Scenario | Expected | Result |
+|---|---------|----------|--------|
+| 1 | Admin → /events/new → name, dates, location, teamLeads=[staff-uid], backupTeams=[] → submit | redirect to /events/<id>; Firestore: events/<id>.allowedStaff contains [admin uids, staff-uid] (synchronous, no lag) | pending |
+| 2 | Admin → /events/<id>/edit → add another user to teamLeads → save | Firestore: teamLeads updated AND allowedStaff includes the new uid (recomputeAllowedStaffForEvent ran synchronously) | pending |
+| 3 | Switch to staff user IN allowedStaff → /events | event appears in list | pending |
+| 4 | Switch to staff user NOT in allowedStaff → /events | event does NOT appear in list (array-contains filter working) | pending |
+| 5 | Admin → /events/<id> → Cancel → mark each open checkout (returned/lost/still_with_owner) → confirm | event.status = "cancelled"; for each "returned" item: availableQty +qty, outQty -qty; for each "lost": missingItems doc created + outQty -qty; for "still_with_owner": no inventory change | pending |
+| 6 | Admin promotion sweep: /users → promote staff to admin | After action: every event's allowedStaff now includes the promoted user (recomputeAllowedStaffForAllEvents from 02-04 user actions; verified Block D side because EVT-08 reads now grant) | pending |
+
+### Block D Rules Audit (8 cases)
+
+| # | Path | Auth | Op | Expected | Result |
+|---|------|------|-----|----------|--------|
+| 1 | events/<id> | staff IN allowedStaff | read | ALLOW (isMember) | pending |
+| 2 | events/<id> | staff NOT in allowedStaff | read | DENY (isMember false) | pending |
+| 3 | events/<id> | admin | read | ALLOW (isAdmin) | pending |
+| 4 | events/<id> | staff (team lead) | update with {name: ...} (no allowedStaff change) | ALLOW (teamLead + untouched) | pending |
+| 5 | events/<id> | staff (team lead) | update with {allowedStaff: [...]} | DENY (untouched('allowedStaff')) | pending |
+| 6 | events/<id> | staff (not team lead) | update | DENY (not admin AND not team lead) | pending |
+| 7 | events/<new-id> | staff | create | ALLOW (allow create: if isSignedIn — Server Action enforces narrower gate) | pending |
+| 8 | events/<id> | admin | delete | ALLOW (isAdmin) | pending |
+
 ## Verification
 
 (Populated when phase completes — must include Regression Report per global CLAUDE.md.)
