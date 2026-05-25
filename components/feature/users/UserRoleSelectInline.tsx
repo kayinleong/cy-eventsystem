@@ -14,6 +14,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import {
@@ -36,6 +37,7 @@ export function UserRoleSelectInline({
   disabled?: boolean;
 }) {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   function change(role: UserRole) {
     if (role === currentRole) return;
@@ -46,6 +48,10 @@ export function UserRoleSelectInline({
         return;
       }
       toast.success(`Role updated to ${role}`);
+      // Force Server Component re-fetch so the table shows the new role even
+      // if useUsersLive's onSnapshot listener is silenced (e.g. by a stale
+      // client-side ID token missing the role=admin custom claim).
+      router.refresh();
     });
   }
 

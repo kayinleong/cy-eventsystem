@@ -18,6 +18,7 @@
 "use client";
 
 import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Ban } from "lucide-react";
 import { toast } from "sonner";
 
@@ -45,6 +46,7 @@ export function DisableUserButton({
   alreadyDisabled: boolean;
 }) {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
   if (alreadyDisabled) return null;
 
   function confirm() {
@@ -55,6 +57,9 @@ export function DisableUserButton({
         return;
       }
       toast(`${displayName} disabled`);
+      // Force Server Component re-fetch so the table shows the disabled badge
+      // even if useUsersLive's onSnapshot listener is silenced.
+      router.refresh();
     });
   }
 
