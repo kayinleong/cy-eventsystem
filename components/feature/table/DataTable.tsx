@@ -9,6 +9,7 @@ import {
   getSortedRowModel,
   useReactTable,
   type ColumnDef,
+  type PaginationState,
   type SortingState,
   type VisibilityState,
 } from "@tanstack/react-table";
@@ -30,10 +31,19 @@ import { DataTableViewOptions } from "./DataTableViewOptions";
 /**
  * DataTable — generic TanStack v8 + shadcn table wrapper with URL state.
  *
- * Used by every list page in Wave 3 (inventory, events, users, reports/*).
+ * Used by list pages NOT yet migrated to cursor pagination per D-17. The
+ * inventory list (Phase 2 02-06) drives `useReactTable` directly with
+ * `manualPagination: true` + SSR-seeded `nextCursor`. Other tables that
+ * still consume this wrapper (EventsTable, HistoryTable, MissingItemsTable,
+ * RepurchaseTable, StockReportTable, ItemsOutTable, UsersTable) keep
+ * client-side pagination via TanStack's internal `PaginationState` until
+ * their respective plans migrate them.
+ *
  * Locked contracts:
  *  - REP-07: default `pageSize = 50` rows per page.
- *  - REP-06: pagination + sort + filters are URL-synced via `useUrlTableState`.
+ *  - REP-06: filters + sort + global filter URL-synced via `useUrlTableState`.
+ *            Page index lives in component state (NOT the URL) until each
+ *            consumer migrates to D-17 cursor URLs.
  *  - D-09:   URL writes use `router.replace` with `scroll: false`.
  *  - D-10:   pagination chrome ALWAYS renders (even with 0 rows).
  *  - D-11:   Sortable columns are whitelist-only — name / SKU, qty /
@@ -48,6 +58,11 @@ import { DataTableViewOptions } from "./DataTableViewOptions";
  * Empty state precedence:
  *  - `data.length === 0` (no rows at source) → render `emptyState` slot
  *  - `data.length > 0 && filtered.rows === 0` (filter excludes all) → "No results."
+ *
+ * Phase 2 (02-06) note: `useUrlTableState` no longer exposes `setPage` per
+ * D-17. This wrapper now drives `pageIndex` internally; consumers that need
+ * cursor pagination (e.g. InventoryTable) bypass this wrapper entirely and
+ * call `useReactTable({ manualPagination: true })` directly.
  */
 export type DataTableProps<T> = {
   columns: ColumnDef<T>[];
@@ -70,8 +85,7 @@ export function DataTable<T>({
   enableColumnVisibility = true,
   toolbarExtras,
 }: DataTableProps<T>) {
-  const { state: url, setPage, setGlobalFilter, setSort } =
-    useUrlTableState(filterKeys);
+  const { state: url, setGlobalFilter, setSort } = useUrlTableState(filterKeys);
 
   // Translate the URL's `<col>:<dir>` shape into TanStack's SortingState array.
   const sorting: SortingState = useMemo(() => {
@@ -84,13 +98,21 @@ export function DataTable<T>({
   // column choices shouldn't pollute the URL on every toggle.
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
 
+  // Phase 2 02-06: `?page=N` URL contract retired per D-17 (cursor only).
+  // Pagination state for non-migrated tables now lives in component state;
+  // consumers needing cursor URLs (InventoryTable) bypass this wrapper.
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize,
+  });
+
   const table = useReactTable({
     data,
     columns,
     state: {
       sorting,
       globalFilter: url.q,
-      pagination: { pageIndex: url.page - 1, pageSize },
+      pagination,
       columnVisibility,
     },
     onSortingChange: (updater) => {
@@ -99,6 +121,7 @@ export function DataTable<T>({
       setSort(first ? `${first.id}:${first.desc ? "desc" : "asc"}` : "");
     },
     onGlobalFilterChange: (q: string) => setGlobalFilter(q),
+    onPaginationChange: setPagination,
     onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -175,8 +198,14 @@ export function DataTable<T>({
         </Table>
       </div>
 
-      {/* D-10: pagination chrome always renders */}
-      <DataTablePagination table={table} onPageChange={setPage} />
+      {/* D-10: pagination chrome always renders. Page index lives in TanStack
+          internal state; clicking Prev/Next mutates `pagination` via setter. */}
+      <DataTablePagination
+        table={table}
+        onPageChange={(page1Based) =>
+          setPagination((p) => ({ ...p, pageIndex: page1Based - 1 }))
+        }
+      />
     </div>
   );
 }
