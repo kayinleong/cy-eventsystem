@@ -1,4 +1,5 @@
-// Phase 1 — Shared EventForm for /events/new (create) and /events/[id]/edit.
+// Phase 2 — Shared EventForm for /events/new (create) and /events/[id]/edit
+// (Block D UI swap, plan 02-07).
 //
 // Uses shadcn v4 <Field> primitives (D-01-04-B / D-01-06-A): the legacy v3
 // <Form> / <FormField> Context wrapper is empty in the radix-nova registry.
@@ -6,17 +7,23 @@
 // shadcn primitives inside each <Field>.
 //
 // REQUIREMENTS:
-//   - EVT-01 — admins (and team leads, in Phase 2) can create events.
-//   - EVT-05 — admins or any team lead of the event can edit (gated in the
-//     [eventId]/edit page).
-//   - PROJECT.md user clarifications — backup team support per event.
+//   - EVT-01 — admin OR self-team-lead can create. Server Action enforces
+//     server-side; here we pre-fill teamLeads with the current user when
+//     creating so the schema's .min(1) check passes without the user having
+//     to add themselves manually.
+//   - EVT-05 — admin OR existing team lead can edit. Server Action enforces.
+//   - Backup team support per event.
 //
 // Calendar pickers use shadcn Calendar inside a Popover (single-date mode).
 // Comboboxes are custom multi-select pickers built on shadcn Command + Popover.
 //
 // D-01-06-G: Zod 4's `.default()` makes input fields `T | undefined` in the
 // rhf input type. Normalize at the submit boundary via `?? defaultValue`
-// before calling the strict-typed store mutators.
+// before calling the strict-typed Server Action.
+//
+// Phase 2 swap: createEvent/updateEvent Server Actions replace mock-store
+// mutators. Validation errors from the action (Zod fieldErrors) surface via
+// rhf.setError so the inline FieldError chrome stays unchanged.
 
 "use client";
 
@@ -32,9 +39,9 @@ import {
   EventFormSchema,
   type EventFormInput,
 } from "@/lib/schemas/event";
-import { createEvent, updateEvent } from "@/lib/mock/store";
-import { seedUsers } from "@/lib/mock/users";
+import { createEvent, updateEvent } from "@/app/(app)/events/actions";
 import { useCurrentUser } from "@/lib/hooks/use-current-user";
+import type { UserDoc } from "@/lib/types/user";
 import {
   Field,
   FieldGroup,
@@ -55,11 +62,21 @@ import { BackupTeamCombobox } from "./BackupTeamCombobox";
 import { cn } from "@/lib/utils";
 
 export type EventFormProps =
-  | { mode: "create"; initial?: EventFormInput; eventId?: undefined }
-  | { mode: "edit"; eventId: string; initial: EventFormInput };
+  | {
+      mode: "create";
+      initial?: EventFormInput;
+      eventId?: undefined;
+      users: UserDoc[];
+    }
+  | {
+      mode: "edit";
+      eventId: string;
+      initial: EventFormInput;
+      users: UserDoc[];
+    };
 
 export function EventForm(props: EventFormProps) {
-  const { mode, initial, eventId } = props;
+  const { mode, initial, eventId, users } = props;
   const router = useRouter();
   const session = useCurrentUser();
   const [submitting, setSubmitting] = useState(false);
@@ -68,6 +85,7 @@ export function EventForm(props: EventFormProps) {
     register,
     handleSubmit,
     control,
+    setError,
     formState: { errors },
   } = useForm<EventFormInput>({
     resolver: zodResolver(EventFormSchema),
@@ -79,9 +97,11 @@ export function EventForm(props: EventFormProps) {
         endDate: "",
         location: "",
         description: "",
-        // EVT-01 — schema requires ≥1 team lead. Pre-fill with the current user
-        // when creating so the field passes initial validation without forcing
-        // the admin to add themselves manually.
+        // EVT-01 — schema requires ≥1 team lead. Pre-fill with the current
+        // user when creating so the field passes initial validation without
+        // forcing the user to add themselves manually. The Server Action
+        // also requires admin OR self-in-teamLeads, so this default also
+        // satisfies the authorization gate for non-admin creators.
         teamLeads: session ? [session.uid] : [],
         backupTeams: [],
       },
@@ -92,15 +112,7 @@ export function EventForm(props: EventFormProps) {
   // Compiler skips compilation of the whole component if used at render time).
   const teamLeads = useWatch({ control, name: "teamLeads" }) ?? [];
 
-  function onSubmit(values: EventFormInput) {
-    const actor = session
-      ? seedUsers.find((u) => u.uid === session.uid)
-      : undefined;
-    if (!actor) {
-      toast.error("Couldn't save event");
-      return;
-    }
-
+  async function onSubmit(values: EventFormInput) {
     // D-01-06-G: normalize Zod-default fields at the submit boundary.
     const payload = {
       name: values.name,
@@ -112,20 +124,52 @@ export function EventForm(props: EventFormProps) {
       backupTeams: values.backupTeams ?? [],
     };
 
-    if (mode === "create") {
-      setSubmitting(true);
-      const ev = createEvent(payload, actor);
-      toast.success("Event created");
-      router.push(`/events/${ev.id}`);
-      router.refresh();
-    } else if (eventId) {
-      setSubmitting(true);
-      updateEvent(eventId, payload, actor);
-      toast.success("Event updated");
-      router.push(`/events/${eventId}`);
-      router.refresh();
+    setSubmitting(true);
+    try {
+      if (mode === "create") {
+        const result = await createEvent(payload);
+        if (!result.ok) {
+          // Surface field-level Zod errors via rhf.setError so the inline
+          // FieldError chrome lights up exactly the bad field.
+          if (result.errors) {
+            for (const [field, messages] of Object.entries(result.errors)) {
+              if (messages && messages.length > 0) {
+                setError(field as keyof EventFormInput, {
+                  type: "server",
+                  message: messages[0],
+                });
+              }
+            }
+          }
+          toast.error(result.error || "Couldn't create event");
+          return;
+        }
+        toast.success("Event created");
+        router.push(`/events/${result.eventId}`);
+        router.refresh();
+      } else if (eventId) {
+        const result = await updateEvent(eventId, payload);
+        if (!result.ok) {
+          if (result.errors) {
+            for (const [field, messages] of Object.entries(result.errors)) {
+              if (messages && messages.length > 0) {
+                setError(field as keyof EventFormInput, {
+                  type: "server",
+                  message: messages[0],
+                });
+              }
+            }
+          }
+          toast.error(result.error || "Couldn't update event");
+          return;
+        }
+        toast.success("Event updated");
+        router.push(`/events/${eventId}`);
+        router.refresh();
+      }
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   }
 
   return (
@@ -272,6 +316,7 @@ export function EventForm(props: EventFormProps) {
               <TeamLeadCombobox
                 value={field.value ?? []}
                 onChange={field.onChange}
+                users={users}
               />
             )}
           />
@@ -294,6 +339,7 @@ export function EventForm(props: EventFormProps) {
                 value={field.value ?? []}
                 onChange={field.onChange}
                 excludeUids={teamLeads}
+                users={users}
               />
             )}
           />

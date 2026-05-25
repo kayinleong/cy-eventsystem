@@ -1,4 +1,4 @@
-// Phase 1 — BackupTeamCombobox.
+// Phase 2 — BackupTeamCombobox (Block D UI swap, plan 02-07).
 //
 // Multi-select user picker for the EventForm "Backup team" field. Same shape
 // as `TeamLeadCombobox` but accepts an `excludeUids` prop so users already
@@ -7,8 +7,11 @@
 // REQUIREMENTS:
 //   - Backup team support per event (project-level requirement — see
 //     PROJECT.md user clarifications: "Backup team support per event").
-//   - allowedStaff = teamLeads + backupTeams + admins (computed by the store
-//     mutator, not here — see lib/mock/store.ts createEvent/updateEvent).
+//   - allowedStaff = teamLeads + backupTeams + admins (computed server-side
+//     by the createEvent / updateEvent Server Actions — see
+//     app/(app)/events/actions.ts).
+//
+// Phase 2 swap: receives `users` as a prop instead of reading from mock store.
 
 "use client";
 
@@ -30,24 +33,26 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { useMockStore } from "@/lib/hooks/use-mock-store";
+import type { UserDoc } from "@/lib/types/user";
 import { cn } from "@/lib/utils";
 
 export function BackupTeamCombobox({
   value,
   onChange,
   excludeUids = [],
+  users,
 }: {
   value: string[];
   onChange: (uids: string[]) => void;
   excludeUids?: string[];
+  users: UserDoc[];
 }) {
   const [open, setOpen] = useState(false);
   // Pull ALL non-disabled users for chip rendering; filter excludeUids only
   // for the picker options so a previously-selected backup user whose uid is
   // now excluded (e.g. they were promoted to a team lead in the same form)
   // still renders as a removable chip.
-  const allUsers = useMockStore((s) => s.users.filter((u) => !u.disabled));
+  const allUsers = users.filter((u) => !u.disabled);
   const pickerUsers = allUsers.filter((u) => !excludeUids.includes(u.uid));
 
   const toggle = (uid: string) => {

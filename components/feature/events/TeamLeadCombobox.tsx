@@ -1,4 +1,4 @@
-// Phase 1 — TeamLeadCombobox.
+// Phase 2 — TeamLeadCombobox (Block D UI swap, plan 02-07).
 //
 // Multi-select user picker for the EventForm "Team leads" field. Built on
 // shadcn `Command` + `Popover` (cmdk-driven typeahead) with selected uids
@@ -8,9 +8,10 @@
 //   - EVT-01 — events have at least one team lead (enforced at schema level by
 //     EventFormSchema.teamLeads.min(1)).
 //
-// Data source: `useMockStore(s => s.users)` — filters out disabled users so an
-// event can't be created with a disabled lead. Selected uids are passed in
-// from the rhf-controlled value; the combobox is a controlled component.
+// Phase 2 swap: the combobox now receives `users` as a prop from the
+// EventForm parent (which receives it from the SSR seed in /events/new and
+// /events/[id]/edit). This removes the mock-store dependency without
+// changing the visual contract.
 
 "use client";
 
@@ -32,18 +33,20 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
-import { useMockStore } from "@/lib/hooks/use-mock-store";
+import type { UserDoc } from "@/lib/types/user";
 import { cn } from "@/lib/utils";
 
 export function TeamLeadCombobox({
   value,
   onChange,
+  users,
 }: {
   value: string[];
   onChange: (uids: string[]) => void;
+  users: UserDoc[];
 }) {
   const [open, setOpen] = useState(false);
-  const users = useMockStore((s) => s.users.filter((u) => !u.disabled));
+  const enabledUsers = users.filter((u) => !u.disabled);
 
   const toggle = (uid: string) => {
     if (value.includes(uid)) onChange(value.filter((u) => u !== uid));
@@ -75,7 +78,7 @@ export function TeamLeadCombobox({
             <CommandList>
               <CommandEmpty>No users found.</CommandEmpty>
               <CommandGroup>
-                {users.map((u) => (
+                {enabledUsers.map((u) => (
                   <CommandItem
                     key={u.uid}
                     value={`${u.displayName} ${u.email}`}
@@ -103,7 +106,7 @@ export function TeamLeadCombobox({
       {value.length > 0 ? (
         <div className="flex flex-wrap gap-1">
           {value.map((uid) => {
-            const u = users.find((x) => x.uid === uid);
+            const u = enabledUsers.find((x) => x.uid === uid);
             if (!u) return null;
             return (
               <Badge key={uid} variant="secondary" className="gap-1">
