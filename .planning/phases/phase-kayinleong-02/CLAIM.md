@@ -6,7 +6,7 @@
 - started: 2026-05-25
 - status: in-progress
 - summary: Functionality — wire Firebase Auth + Firestore + 2 Cloud Functions + Storage; replace every mock with real backend; UI surface frozen from Phase 1
-- current plan: 02-04 (users + 2 Cloud Functions + invite — Wave 4, Block B)
+- current plan: 02-05 (inventory data layer + Server Actions — Wave 5, Block C); 02-04 functionally complete with deferred verifications (invite-email smoke + Block B rules audit)
 
 ## What will change
 
