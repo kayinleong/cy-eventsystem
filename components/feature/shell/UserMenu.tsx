@@ -1,11 +1,14 @@
-// Top-bar user menu — avatar dropdown housing theme controls, the POC role
-// switcher, and sign-out.
+// Top-bar user menu — avatar dropdown housing theme controls + sign-out.
 //
 // UI-SPEC: "App shell" — user menu (right) contains theme toggle (light/dark/
-// system) + sign out. We also embed the PhaseOnePocRoleSwitcher (D-06).
+// system) + sign out.
 //
 // The theme controls are inlined here (rather than reusing the standalone
 // ThemeToggle) so all account controls live under one menu — UI-SPEC pattern.
+//
+// Phase 2: role switcher removed — role switching is no longer a UI
+// affordance; admins promote/demote via /users page. Roles propagate via
+// custom claims (Cloud Function 1 in plan 02-04).
 
 "use client";
 
@@ -22,7 +25,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { PhaseOnePocRoleSwitcher } from "@/components/feature/auth/PhaseOnePocRoleSwitcher";
 import { SignOutButton } from "@/components/feature/auth/SignOutButton";
 import type { Session } from "@/lib/types/session";
 
@@ -72,7 +74,6 @@ export function UserMenu({ session }: { session: Session }) {
         <DropdownMenuItem onClick={() => setTheme("system")}>
           <Monitor className="mr-2 size-4" /> System
         </DropdownMenuItem>
-        <PhaseOnePocRoleSwitcher />
         <DropdownMenuSeparator />
         <SignOutButton />
       </DropdownMenuContent>
