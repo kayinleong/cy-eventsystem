@@ -24,6 +24,14 @@ Phase 2 internally organized into ROADMAP Blocks A–H (Foundation, Users + role
   - `onWrite(users/{uid})` → `setCustomUserClaims(uid, { role })` to mirror Firestore role to ID token claims (KD #9).
   - `onWrite(events/{id})` OR `onWrite(users/{uid})` → maintain denormalized `event.allowedStaff` union (admins + teamLeads + backupTeams). ROADMAP Block D requirement.
   - No scheduled functions. No email-trigger functions. No nightly stale-event scanner (PITFALLS C5 mitigation deferred to v2 or manual ops).
+- **D-02 (refined during planning, 2026-05-25):** Cloud Functions scope = **2 logical functions, 3 trigger registrations** in v1:
+  - Function 1: `onUserWriteSetClaims` — `onWrite(users/{uid})` → `setCustomUserClaims(uid, { role })` to mirror Firestore role to ID token claims.
+  - Function 2 (allowedStaff sync) is implemented as TWO trigger registrations because the union depends on data from both collections:
+    - `onEventTeamChange` — `onWrite(events/{id})` → recompute `event.allowedStaff` when team membership changes.
+    - `onUserRoleChange` — `onWrite(users/{uid})` → recompute `allowedStaff` across all events when a user becomes/ceases-being admin.
+  - Both share the same recompute logic in a single source file `functions/src/allowed-staff.ts` exporting `computeAllowedStaff(eventId)`.
+  - Self-write loop guard per RESEARCH A6: skip if `event.allowedStaff` already equals computed union.
+  - Original D-02 OR-formulation reflected pre-research intent; both triggers are required.
 - **D-03:** **Single Firebase project** for everything (prod). No staging environment, no per-developer dev projects. Local `npm run dev` writes to the live Firestore. Sole developer per PROJECT.md — data contention is zero.
 - **D-04:** **No Firebase Emulator Suite** for dev or local testing. All dev iteration hits the live project.
 - **D-05:** First admin user via **`scripts/seed-first-admin.ts`** — a one-time Admin SDK script that `createUser` → `setCustomUserClaims({role:'admin'})` → writes `users/{uid}` doc with `role:'admin'`. Run manually after Firebase project provision. Documented in PROJECT.md Context section + this CONTEXT.md.

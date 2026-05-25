@@ -35,10 +35,10 @@ requirements:
 
 must_haves:
   truths:
-    - "functions/ directory ships with package.json, tsconfig.json, and 2 Firestore-triggered Cloud Functions per D-02."
-    - "Function 1 (setCustomUserClaims) sets {role: 'admin'|'staff'} on onWrite users/{uid} and revokes refresh tokens on change."
-    - "Function 2 (syncAllowedStaff) maintains event.allowedStaff = unique(admins ∪ teamLeads ∪ backupTeams) on onWrite events/{id} and onWrite users/{uid} role changes."
-    - "Function 2 has a self-write loop guard (compares before/after minus allowedStaff) per RESEARCH §2.4 + RESEARCH P5."
+    - "functions/ directory ships with package.json, tsconfig.json, and the 2 logical Cloud Functions per refined D-02 (2 functions, 3 trigger registrations)."
+    - "Function 1 (onUserWriteSetClaims) sets {role: 'admin'|'staff'} on onWrite users/{uid} and revokes refresh tokens on change."
+    - "Function 2 (allowedStaff sync) is implemented as TWO trigger registrations — onEventTeamChange + onUserRoleChange — sharing the same recompute logic per refined D-02 / RESEARCH §2.4. Both triggers are functionally required (admin role changes affect all events; team-membership changes affect one event)."
+    - "Function 2 has a self-write loop guard (onlyAllowedStaffChanged) per RESEARCH §2.4 + RESEARCH P5 + A6."
     - "Server Actions inviteUser/setUserRole/disableUser live in app/(app)/users/actions.ts, each gated by requireAdmin()."
     - "inviteUser returns the password reset URL in its response payload per D-09 (success AND failure paths)."
     - "/users/invite page shows the reset URL with a Copy button after submit per D-09."
@@ -46,19 +46,20 @@ must_haves:
     - "lib/data/users.server.ts ships Admin SDK cursor-paginated read helpers per D-17."
     - "lib/hooks/use-users-live.ts ships onSnapshot-backed reactive hook per D-20 (50-row scope)."
     - "firebase.json `functions[0].codebase` matches the actual functions package name."
+    - "functions/package.json contains NO 'serve' / emulator script per D-04 (emulator suite forbidden, not just unused)."
     - "Manual rules audit covers users + transactions collections per D-06 mitigation."
   artifacts:
     - path: "functions/src/setCustomUserClaims.ts"
       provides: "onDocumentWritten users/{uid} → setCustomUserClaims + revokeRefreshTokens"
       contains: "setCustomUserClaims"
     - path: "functions/src/syncAllowedStaff.ts"
-      provides: "Function 2 with self-write guard per RESEARCH P5"
+      provides: "Function 2 (2 trigger registrations) with self-write guard per RESEARCH P5"
       contains: "onlyAllowedStaffChanged"
     - path: "functions/src/index.ts"
-      provides: "Both function exports"
+      provides: "All 3 trigger exports of the 2 logical functions"
       contains: "onUserWriteSetClaims"
     - path: "functions/package.json"
-      provides: "Standalone npm scope for functions package with engines.node: 20"
+      provides: "Standalone npm scope for functions package with engines.node: 20 and NO emulator/serve script"
       contains: "firebase-functions"
     - path: "app/(app)/users/actions.ts"
       provides: "inviteUser, setUserRole, disableUser Server Actions"
@@ -85,7 +86,7 @@ must_haves:
 ---
 
 <objective>
-**Block B — Users + roles.** Ship the 2 Cloud Functions per D-02 (setCustomUserClaims + allowedStaff sync), wire `inviteUser` / `setUserRole` / `disableUser` Server Actions in `app/(app)/users/actions.ts`, swap `/users` and `/users/invite` from mock-store to the actions, and stand up the Admin SDK read helper + live hook for users.
+**Block B — Users + roles.** Ship the 2 logical Cloud Functions per refined D-02 (Function 1 = setCustomUserClaims; Function 2 = allowedStaff sync, implemented as 2 trigger registrations sharing one recompute path), wire `inviteUser` / `setUserRole` / `disableUser` Server Actions in `app/(app)/users/actions.ts`, swap `/users` and `/users/invite` from mock-store to the actions, and stand up the Admin SDK read helper + live hook for users.
 
 Per RESEARCH §2 (Block B) + PATTERNS.md §1 row `app/(app)/users/actions.ts`: mutator-name → Server-Action mapping is 1:1 with Phase 1 by design.
 
@@ -157,10 +158,10 @@ export function useUsersLive(initial: UserDoc[], opts?: { role?: "admin"|"staff"
 ```
 
 ```typescript
-// Cloud Functions exported from functions/src/index.ts
-export const onUserWriteSetClaims: CloudFunction;
-export const onEventTeamChange: CloudFunction;
-export const onUserRoleChange: CloudFunction;
+// Cloud Functions exported from functions/src/index.ts (3 trigger registrations across 2 logical functions per refined D-02)
+export const onUserWriteSetClaims: CloudFunction;  // Function 1
+export const onEventTeamChange: CloudFunction;     // Function 2 — trigger A
+export const onUserRoleChange: CloudFunction;      // Function 2 — trigger B
 ```
 </interfaces>
 </context>
@@ -178,12 +179,14 @@ export const onUserRoleChange: CloudFunction;
   <read_first>
     - .planning/phases/phase-kayinleong-02/02-RESEARCH.md §2.1 lines 480-509 (functions structure + package.json)
     - .planning/phases/phase-kayinleong-02/02-RESEARCH.md §2.2 lines 510-523 (firebase.json)
-    - .planning/phases/phase-kayinleong-02/02-CONTEXT.md D-02 (exactly 2 functions)
+    - .planning/phases/phase-kayinleong-02/02-CONTEXT.md D-02 refined (2 logical functions, 3 trigger registrations) + D-04 (no emulator suite)
     - firebase.json (from 02-02; verify `functions` block exists)
     - .gitignore (root — verify it covers `functions/lib/` and `functions/node_modules/`)
   </read_first>
   <action>
     **Step 1.1 — Create `functions/package.json`:**
+
+    Per D-04, the Firebase Emulator Suite is forbidden. The `serve` script that `firebase init functions` scaffolds MUST be omitted entirely — not just commented out — so the codebase contains no emulator codepath at all.
 
     ```json
     {
@@ -195,7 +198,6 @@ export const onUserRoleChange: CloudFunction;
         "build": "tsc",
         "build:watch": "tsc --watch",
         "lint": "eslint --ext .js,.ts .",
-        "serve": "npm run build && firebase emulators:start --only functions",
         "deploy": "firebase deploy --only functions",
         "logs": "firebase functions:log"
       },
@@ -209,7 +211,7 @@ export const onUserRoleChange: CloudFunction;
     }
     ```
 
-    NOTE: per D-04 we DO NOT use the emulator suite. The `serve` script is included only because `firebase init functions` would scaffold it; do not invoke it. `firebase deploy --only functions` deploys to the live project.
+    NOTE: The `serve` / `firebase emulators:start` script is deliberately ABSENT. D-04 forbids the emulator suite — we never ship that codepath. Deploys happen via `firebase deploy --only functions` to the live project.
 
     **Step 1.2 — Create `functions/tsconfig.json`:**
 
@@ -298,6 +300,8 @@ export const onUserRoleChange: CloudFunction;
     - `grep -q "\"node\": \"20\"" functions/package.json` succeeds.
     - `grep -q "firebase-functions" functions/package.json` succeeds.
     - `grep -q "firebase-admin" functions/package.json` succeeds.
+    - **`grep -q '"serve"' functions/package.json` returns NOTHING (no emulator script — D-04 enforcement).**
+    - **`grep -q 'emulators' functions/package.json` returns NOTHING (no emulator codepath at all — D-04 enforcement).**
     - `test -f functions/tsconfig.json` succeeds.
     - `grep -q "\"outDir\": \"lib\"" functions/tsconfig.json` succeeds.
     - `test -f functions/.gitignore` succeeds.
@@ -308,9 +312,9 @@ export const onUserRoleChange: CloudFunction;
     - `test -d functions/node_modules/firebase-admin` succeeds (deps installed).
   </acceptance_criteria>
   <verify>
-    <automated>test -f functions/package.json && grep -q '"node": "20"' functions/package.json && grep -q "firebase-functions" functions/package.json && test -f functions/tsconfig.json && grep -q "predeploy" firebase.json && test -d functions/node_modules/firebase-admin</automated>
+    <automated>test -f functions/package.json && grep -q '"node": "20"' functions/package.json && grep -q "firebase-functions" functions/package.json && ! grep -q '"serve"' functions/package.json && ! grep -q "emulators" functions/package.json && test -f functions/tsconfig.json && grep -q "predeploy" firebase.json && test -d functions/node_modules/firebase-admin</automated>
   </verify>
-  <done>functions/ package scaffolded with TypeScript + Node 20 + firebase-admin/functions deps. firebase.json predeploys build before deploy.</done>
+  <done>functions/ package scaffolded with TypeScript + Node 20 + firebase-admin/functions deps. firebase.json predeploys build before deploy. Zero emulator codepath per D-04.</done>
 </task>
 
 <task type="auto">
@@ -321,7 +325,7 @@ export const onUserRoleChange: CloudFunction;
   </files>
   <read_first>
     - .planning/phases/phase-kayinleong-02/02-RESEARCH.md §2.3 lines 524-573 (Function 1 full implementation)
-    - .planning/phases/phase-kayinleong-02/02-CONTEXT.md D-02 (Function 1: onWrite users/{uid} → setCustomUserClaims)
+    - .planning/phases/phase-kayinleong-02/02-CONTEXT.md D-02 refined (Function 1: onWrite users/{uid} → setCustomUserClaims)
     - .planning/phases/phase-kayinleong-02/02-RESEARCH.md §"P6: setCustomUserClaims rate limit" + "P7: Stale claims after role change"
     - .planning/REQUIREMENTS.md AUTH-08 (role change ≤1h or immediately on next sign-in)
   </read_first>
@@ -330,10 +334,10 @@ export const onUserRoleChange: CloudFunction;
 
     ```typescript
     // functions/src/setCustomUserClaims.ts
-    // Cloud Function 1 per D-02. Triggers on users/{uid} writes; mirrors Firestore
-    // role into Firebase Auth custom claims. Revokes refresh tokens on change so
-    // AUTH-08 propagates immediately on next-request (DAL rejects revoked sessions).
-    // Per RESEARCH §2.3 lines 524-573.
+    // Cloud Function 1 per refined D-02. Triggers on users/{uid} writes; mirrors
+    // Firestore role into Firebase Auth custom claims. Revokes refresh tokens on
+    // change so AUTH-08 propagates immediately on next-request (DAL rejects revoked
+    // sessions). Per RESEARCH §2.3 lines 524-573.
 
     import { onDocumentWritten } from "firebase-functions/v2/firestore";
     import { initializeApp, getApps } from "firebase-admin/app";
@@ -376,12 +380,15 @@ export const onUserRoleChange: CloudFunction;
 
     **CRITICAL:** Use region `asia-southeast1` per RESEARCH assumption A1 (Hong Kong-based developer). MUST match Firestore region.
 
-    **Step 2.2 — Create `functions/src/index.ts`** (re-exports both functions):
+    **Step 2.2 — Create `functions/src/index.ts`** (re-exports all three trigger registrations of the 2 logical functions per refined D-02):
 
     ```typescript
     // functions/src/index.ts
-    // Re-exports both Cloud Functions per D-02. Add exports here when implementing
-    // Function 2 (Task 3).
+    // Re-exports all trigger registrations for the 2 logical Cloud Functions per refined D-02:
+    //  - Function 1: onUserWriteSetClaims (1 trigger)
+    //  - Function 2 (allowedStaff sync): onEventTeamChange + onUserRoleChange (2 triggers, shared logic)
+    //
+    // See CONTEXT.md "D-02 (refined during planning, 2026-05-25)" for rationale.
 
     export { onUserWriteSetClaims } from "./setCustomUserClaims";
     export { onEventTeamChange, onUserRoleChange } from "./syncAllowedStaff";
@@ -411,24 +418,25 @@ export const onUserRoleChange: CloudFunction;
 </task>
 
 <task type="auto">
-  <name>Task 3: Cloud Function 2 — allowedStaff sync with self-write guard</name>
+  <name>Task 3: Cloud Function 2 — allowedStaff sync (2 trigger registrations, shared logic) with self-write guard</name>
   <files>functions/src/syncAllowedStaff.ts</files>
   <read_first>
-    - .planning/phases/phase-kayinleong-02/02-RESEARCH.md §2.4 lines 574-650 (Function 2 full implementation including self-write guard)
-    - .planning/phases/phase-kayinleong-02/02-CONTEXT.md D-02 (Function 2: maintain event.allowedStaff = admins ∪ teamLeads ∪ backupTeams)
+    - .planning/phases/phase-kayinleong-02/02-RESEARCH.md §2.4 lines 574-650 (Function 2 full implementation including self-write guard — JUSTIFICATION for both trigger registrations)
+    - .planning/phases/phase-kayinleong-02/02-CONTEXT.md "D-02 (refined during planning, 2026-05-25)" — 2 logical functions, 3 triggers, shared recompute logic
     - .planning/phases/phase-kayinleong-02/02-RESEARCH.md §"P5: Cloud Function infinite loop (self-write)"
     - .planning/phases/phase-kayinleong-02/02-RESEARCH.md "A6" Assumption (self-write guard is standard pattern)
   </read_first>
   <action>
-    Create `functions/src/syncAllowedStaff.ts` per RESEARCH §2.4 lines 574-650 verbatim:
+    Create `functions/src/syncAllowedStaff.ts` per RESEARCH §2.4 lines 574-650 verbatim. This file implements **Function 2** of the refined D-02 pair: a single logical function (maintain `event.allowedStaff = unique(admins ∪ teamLeads ∪ backupTeams)`) that requires TWO trigger registrations because its inputs span two collections. Both triggers share the `recomputeForEvent(eventId)` recompute path defined in this file.
 
     ```typescript
     // functions/src/syncAllowedStaff.ts
-    // Cloud Function 2 per D-02. Maintains event.allowedStaff = unique(admins ∪ teamLeads ∪ backupTeams).
-    // Two triggers (RESEARCH §2.4):
-    //  - onEventTeamChange: when an event's team fields change
-    //  - onUserRoleChange: when a user's role flips to/from admin
-    // Self-write loop guard per RESEARCH P5 + A6.
+    // Cloud Function 2 per refined D-02 — ONE logical function (allowedStaff sync),
+    // TWO trigger registrations because the union depends on data from two collections:
+    //  - onEventTeamChange: an event's team fields changed → recompute that event
+    //  - onUserRoleChange:  a user's admin role flipped → recompute ALL events
+    // Both triggers funnel through recomputeForEvent(eventId).
+    // Self-write loop guard per RESEARCH P5 + A6 (skip if before/after differ ONLY in allowedStaff).
 
     import { onDocumentWritten } from "firebase-functions/v2/firestore";
     import { initializeApp, getApps } from "firebase-admin/app";
@@ -522,6 +530,7 @@ export const onUserRoleChange: CloudFunction;
     - `test -f functions/src/syncAllowedStaff.ts` succeeds.
     - `grep -q "onEventTeamChange" functions/src/syncAllowedStaff.ts` succeeds.
     - `grep -q "onUserRoleChange" functions/src/syncAllowedStaff.ts` succeeds.
+    - `grep -q "recomputeForEvent" functions/src/syncAllowedStaff.ts` succeeds (shared recompute path — both triggers funnel here per refined D-02).
     - `grep -q "onlyAllowedStaffChanged" functions/src/syncAllowedStaff.ts` succeeds (self-write guard).
     - `grep -q "asia-southeast1" functions/src/syncAllowedStaff.ts` succeeds.
     - `grep -q "where(\"role\", \"==\", \"admin\")" functions/src/syncAllowedStaff.ts` succeeds.
@@ -529,9 +538,9 @@ export const onUserRoleChange: CloudFunction;
     - `test -f functions/lib/index.js` succeeds (build artifact exists).
   </acceptance_criteria>
   <verify>
-    <automated>test -f functions/src/syncAllowedStaff.ts && grep -q "onlyAllowedStaffChanged" functions/src/syncAllowedStaff.ts && grep -q "asia-southeast1" functions/src/syncAllowedStaff.ts && (cd functions && npm run build) && test -f functions/lib/index.js</automated>
+    <automated>test -f functions/src/syncAllowedStaff.ts && grep -q "onlyAllowedStaffChanged" functions/src/syncAllowedStaff.ts && grep -q "recomputeForEvent" functions/src/syncAllowedStaff.ts && grep -q "asia-southeast1" functions/src/syncAllowedStaff.ts && (cd functions && npm run build) && test -f functions/lib/index.js</automated>
   </verify>
-  <done>Both Cloud Functions compile. Ready to deploy in Task 7.</done>
+  <done>Both Cloud Functions compile (2 logical functions; 3 trigger registrations per refined D-02). Ready to deploy in Task 7.</done>
 </task>
 
 <task type="auto">
@@ -1207,8 +1216,9 @@ export const onUserRoleChange: CloudFunction;
 
 <verification>
 - `functions/` is a valid Firebase Functions package (package.json + tsconfig.json + .gitignore + src/index.ts).
+- `functions/package.json` contains NO `serve` script and NO `emulators` reference (D-04 enforcement at codebase level, not just by convention).
 - Cloud Function 1 (`onUserWriteSetClaims`) compiled and deployed; tested manually via Task 7 step B.
-- Cloud Function 2 (`onEventTeamChange` + `onUserRoleChange`) compiled and deployed; self-write loop guard verified by inspecting source.
+- Cloud Function 2 (allowedStaff sync) — 2 trigger registrations (`onEventTeamChange` + `onUserRoleChange`) sharing `recomputeForEvent()` — compiled and deployed; self-write loop guard verified by inspecting source.
 - `app/(app)/users/actions.ts` exports `inviteUser`, `setUserRole`, `disableUser`. Each calls `requireAdmin()` at the top.
 - `inviteUser` returns `{ok: true, uid, resetLink}` on success; `{ok: false, error}` (with optional `errors` for Zod fail) otherwise.
 - Each Server Action calls `revalidatePath("/users")`.
@@ -1226,14 +1236,15 @@ export const onUserRoleChange: CloudFunction;
 - AUTH-07 (invite + reset link displayed), AUTH-08 (role propagation via Cloud Function + revoke), AUTH-09 (disable + revoke + Firestore mirror), AUTH-10 (admin-only nav via DAL + Server Action gating) all functional.
 - INT-04 (Server Actions verify session + role) satisfied for /users surface.
 - NFR-06 (use server + verifySession) satisfied for /users actions.
-- D-02 exactly-2-functions delivered (3 exports = onUserWriteSetClaims + onEventTeamChange + onUserRoleChange; the latter two share the same purpose per RESEARCH §2.4).
+- D-02 (refined): 2 logical functions delivered. Function 1 = onUserWriteSetClaims. Function 2 = allowedStaff sync, implemented as onEventTeamChange + onUserRoleChange trigger registrations sharing computeAllowedStaff(eventId) logic. See CONTEXT.md D-02 refinement.
+- D-04 (no emulator suite) honored at codebase level: functions/package.json contains no `serve` / emulator script.
 - D-09 Copy-link UI live and tested.
 - Block B rules audit recorded.
 </success_criteria>
 
 <output>
 After completion, create `.planning/phases/phase-kayinleong-02/02-04-users-cloud-function-and-actions-SUMMARY.md` documenting:
-- functions/ package structure + the 2 Cloud Functions deployed.
+- functions/ package structure + the 2 logical Cloud Functions (3 trigger registrations) deployed per refined D-02.
 - 3 Server Actions + their auth gating.
 - New helpers (lib/data/users.server.ts + lib/hooks/use-users-live.ts).
 - Block B manual rules audit findings (6 test cases).
