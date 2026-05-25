@@ -1,18 +1,24 @@
-// Phase 1 — /inventory list page.
+// Phase 2 — /inventory list page (Block C UI swap).
 //
-// Server-Component shell that hands off to the client `InventoryTable` island.
-// The role-gate from (app)/layout.tsx (Plan 04) has already enforced auth at
-// this point; here we only need the session.role to gate the admin-only
-// "Add item" CTA in the page header.
+// Server Component shell that:
+//   - Verifies the session via the real DAL (requireSession redirects to
+//     /api/auth/expire-session if the __session cookie is missing/invalid).
+//   - Issues a cursor-paged Admin SDK read via getInventoryPage (50-row slice
+//     per D-20). The slice + the SSR-seeded `nextCursor` are passed to the
+//     client InventoryTable, which subscribes to the same window via
+//     onSnapshot (Web SDK) for live updates.
+//   - Gates the admin-only "Add item" CTA on session.role === "admin".
 //
-// URL state (q, category, lifecycle, lowStock, page, sort) lives inside the
-// client table via `useUrlTableState` (Plan 03). No prop drilling.
+// URL contract per D-17 (Phase 2 amendment): `?cursor=xxx` opaque base64
+// JSON blob replaces Phase 1's `?page=N`. Filter URL params (`?category=`,
+// `?lifecycleState=`, `?isLowStock=`, `?q=`) survive unchanged per REP-06.
 //
 // REQUIREMENTS:
 //   - INV-06 — filterable list by category, lifecycle, low-stock
-//   - INV-07 — free-text search by name/SKU
-//   - REP-06 — shareable filter URLs
-//   - REP-07 — 50 rows/page default (DataTable wrapper default)
+//   - INV-07 — free-text search by name/SKU (filtered client-side within the
+//     50-row cursor window per D-20; server-side text search out-of-scope)
+//   - REP-06 — shareable filter URLs (cursor + filters)
+//   - REP-07 — 50 rows/page (the cursor window size)
 
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -20,14 +26,40 @@ import { Plus } from "lucide-react";
 
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
-import { getMockSession } from "@/lib/auth/mock-session";
+import { requireSession } from "@/lib/auth/dal";
+import { getInventoryPage } from "@/lib/data/inventory.server";
 import { InventoryTable } from "@/components/feature/inventory/InventoryTable";
 
 export const metadata: Metadata = { title: "Inventory" };
 
-export default async function InventoryListPage() {
-  const session = await getMockSession();
-  const isAdmin = session?.role === "admin";
+type RouteProps = {
+  searchParams: Promise<{
+    cursor?: string;
+    category?: string;
+    lifecycleState?: string;
+    isLowStock?: string;
+    q?: string;
+  }>;
+};
+
+export default async function InventoryListPage({ searchParams }: RouteProps) {
+  // Defense-in-depth: the (app) layout already gated auth; requireSession
+  // here also narrows session.role + session.uid to non-nullable for the
+  // admin CTA. requireSession redirects to /api/auth/expire-session on a
+  // revoked/missing cookie.
+  const session = await requireSession();
+  const isAdmin = session.role === "admin";
+
+  const params = await searchParams; // Next 16 async
+  const { items, nextCursor } = await getInventoryPage({
+    cursor: params.cursor ?? null,
+    filters: {
+      category: params.category,
+      lifecycleState: params.lifecycleState,
+      isLowStock: params.isLowStock === "true" ? true : undefined,
+    },
+  });
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -44,7 +76,7 @@ export default async function InventoryListPage() {
           ) : null
         }
       />
-      <InventoryTable />
+      <InventoryTable initialItems={items} nextCursor={nextCursor} />
     </div>
   );
 }

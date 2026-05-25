@@ -1,16 +1,19 @@
-// Phase 1 — /inventory/new admin-gated create form route.
+// Phase 2 — /inventory/new admin-gated create form route (Block C UI swap).
 //
 // REQUIREMENTS:
 //   - INV-01 — admins can create new inventory items
-//   - AUTH-10 — only admins can access this route (staff → /unauthorized)
+//   - AUTH-10 — only admins can access this route (staff → /unauthorized via
+//     requireAdmin's redirect)
 //
-// The role gate runs server-side via requireAdmin() (Plan 02 helper). The form
-// itself is a client island — see ItemForm.tsx.
+// The role gate runs server-side via requireAdmin() from the real DAL
+// (lib/auth/dal.ts). The form itself is a Client Component — see ItemForm.tsx
+// — and calls the createItem Server Action defined in app/(app)/inventory/
+// actions.ts (plan 02-05) on submit.
 
 import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/ui/page-header";
-import { requireAdmin } from "@/lib/auth/mock-session";
+import { requireAdmin } from "@/lib/auth/dal";
 import { ItemForm } from "@/components/feature/inventory/ItemForm";
 
 export const metadata: Metadata = { title: "Add item" };
