@@ -53,7 +53,9 @@ Every UI surface that AUTH/INV/EVT/CO/CI/MIS/REP/RP/SCN/AUD requires must exist 
 - [x] 01-12-users-settings-PLAN.md — /users (admin-only) with role-edit + disable, /users/invite, /settings with theme + low-stock thresholds — _completed 2026-05-25 (commits 10c4cb7, e40f30c)_
 
 **Wave 4 — Verification gate**
-- [ ] 01-13-verification-gate-PLAN.md — Build/lint/typecheck/smoke + acceptance demo human-verify checkpoint
+- [x] 01-13-verification-gate-PLAN.md — Build/lint/typecheck/smoke + acceptance demo human-verify checkpoint — _completed 2026-05-25 (commits 3895207, b2aeb56)_
+
+**Phase 1 status:** ✓ Complete (2026-05-24 → 2026-05-25). All 13 plans landed, all automated gates green, stakeholder approved the 10-step acceptance demo. One regression fixed mid-verification: `useMockStore` re-architected (commit `b2aeb56`) to subscribe to the raw store snapshot and derive via useMemo, fixing the "uncached getServerSnapshot" infinite loop that crashed the dashboard widgets.
 
 ### Success criteria
 

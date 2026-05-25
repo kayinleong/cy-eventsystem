@@ -4,12 +4,9 @@
 - session: claude-code
 - branch: main
 - started: 2026-05-24
-- status: in-progress
+- completed: 2026-05-25
+- status: done
 - summary: UI POC — full UI shell for every route with mock data, no backend wiring
-
-> **Status note (2026-05-25):** All 13 plans complete; all automated gates PASS. Status is held at
-> `in-progress` pending the Phase 1 acceptance-demo human-verify checkpoint (manual
-> click-through by the stakeholder). On approval, flip to `status: done` and commit.
 
 ## What will change
 
@@ -124,11 +121,24 @@ Per global CLAUDE.md "Regression Prevention" — this section is the regression 
 | Login page content                    | PASS   | Email + Password + Sign in + Forgot password all render                          |
 | Console errors during `next dev`      | PASS   | None observed during automated route navigation (NFR-05)                         |
 
-### Manual click-through (PENDING — human-verify checkpoint)
+### Manual click-through (PASSED — human-verify checkpoint approved 2026-05-25)
 
-The Phase 1 acceptance demo per `01-CONTEXT.md` `<specifics>` requires stakeholder
-walk-through against the running dev server before status can flip to `done`. Awaiting
-checkpoint approval.
+Stakeholder walked through the 10-step acceptance demo per `01-CONTEXT.md` `<specifics>`
+against the running dev server. All steps passed. One regression caught and fixed
+mid-verification:
+
+- **Bug found during verification:** Dashboard widgets hit "Maximum update depth
+  exceeded" (`useSyncExternalStore` rejected `getServerSnapshot` for returning a fresh
+  selector result on each call). `KpiCards` and `RecentActivityFeed` traces in the
+  browser console.
+- **Fix (`b2aeb56`):** Refactored `lib/hooks/use-mock-store.ts` to subscribe to the
+  raw store snapshot (reference-stable until mutation rebuilds state), then derive the
+  selector slice via `useMemo`. Single change resolves the loop for all four dashboard
+  widgets plus every other consumer that passes a derived selector.
+- **Post-fix re-verification:** Dashboard SSR returns 200 in ~150ms; admin walked the
+  full 10-step demo (sign in → create item → create event → flip to staff → scan into
+  cart → commit checkout → flip to admin → resolve missing → return to dashboard with
+  KPIs reflecting changes → dark/light theme toggle). Zero console errors.
 
 ### What was ruled out and why
 
@@ -168,15 +178,14 @@ checkpoint approval.
   Server-Action signature ready for replacement; selectors + types + hook signatures
   stay verbatim per Plan 02 design.
 
-### Acceptance demo (PENDING human-verify)
+### Acceptance demo (PASSED — 2026-05-25)
 
-Acceptance criteria per `01-CONTEXT.md` `<specifics>`:
+All criteria per `01-CONTEXT.md` `<specifics>` confirmed by stakeholder walkthrough
+against `next dev`:
 
-1. Admin signs in → creates an item → creates an event → switches to staff via the
-   PhaseOnePocRoleSwitcher → scans items into a check-out cart → commits the cart →
-   switches back to admin → resolves a missing-item record → notices low-stock widget
-   reflects the changes. End-to-end, no Firebase touched.
-2. No console errors at any step.
-3. Dark mode looks correct on every visited route.
-
-Awaiting stakeholder approval at the checkpoint returned by the executor agent.
+1. ✓ Admin signed in → created an item → created an event → switched to staff via
+   PhaseOnePocRoleSwitcher → scanned items into a check-out cart → committed the cart →
+   switched back to admin → resolved a missing-item record → dashboard KPIs reflected
+   the changes. End-to-end, no Firebase touched.
+2. ✓ No console errors at any step (after the `b2aeb56` `useMockStore` fix).
+3. ✓ Dark mode rendered correctly on every visited route.

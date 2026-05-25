@@ -98,31 +98,36 @@ System files
 
 ### Validated
 
-(None yet — ship to validate. Phase 1 produces validated UI shells; Phase 2 validates the full loop.)
+UI shells validated in Phase 1 (2026-05-25 — stakeholder acceptance demo passed end-to-end):
+- [x] Inventory CRUD UI with item name, SKU, qty, barcode/QR — `/inventory/*` (Phase 1)
+- [x] Event CRUD UI with name, date, location — `/events/*` (Phase 1)
+- [x] Item check-out per event UI (auto-decrement stock, prevent negative) — `/events/[id]/checkout` + `/scan` against mock store (Phase 1)
+- [x] Item check-in per event UI (compare checked-out vs returned) — `/events/[id]/checkin` (Phase 1)
+- [x] Missing-item tracking UI with reason enum (Lost / Damaged / Not returned / Unknown) — `/reports/missing` + ResolveMissingSheet (Phase 1)
+- [x] Low-stock alert + repurchase suggestion list — dashboard widget + `/reports/repurchase` (Phase 1)
+- [x] QR/barcode scanning during check-out and check-in — live camera + 5 decode formats via `@yudiel/react-qr-scanner` (Phase 1)
+- [x] Reports UI: current stock, items out, missing, event history — `/reports/{stock,out,history,missing}` (Phase 1)
+- [x] Roles: Admin / Staff — role gate in `(app)/layout`, role switcher in TopBar (Phase 1)
+- [x] Admin-invite-only registration UI (no public signup) — `/users/invite` admin-only, `/register` returns 404 (Phase 1)
+- [x] Dedicated QR check-out and check-in pages (scanner-first) — `/events/[id]/checkout` + `/events/[id]/checkin` (Phase 1)
+- [x] Post-scan event picker (assign to Event A vs Event B) — EventPickerDialog on `/scan` (Phase 1)
+- [x] Return-to-inventory flow on check-in — store.checkin routes returnedQty to availableQty (Phase 1)
+- [x] Backup team support per event (multiple teams can act on one event) — BackupTeamCombobox + allowedStaff union (Phase 1)
+- [x] Item lifecycle states (`available` / `checked_out` / `damaged` / `retired`) — Phase 1 surface; retire AlertDialog ships (Phase 1)
+- [x] Audit log / activity history (per-item chronological feed) — RecentActivityFeed + per-item history tab (Phase 1)
 
 ### Active
 
-User-stated:
-- [ ] Inventory CRUD with item name, SKU, qty, barcode/QR
-- [ ] Event CRUD with name, date, location
-- [ ] Item check-out per event (auto-decrement stock, prevent negative)
-- [ ] Item check-in per event (compare checked-out vs returned)
-- [ ] Missing-item tracking with reason enum (Lost / Damaged / Not returned / Unknown)
-- [ ] Low-stock alert + repurchase suggestion list
-- [ ] QR/barcode scanning during check-out and check-in
-- [ ] Reports: current stock, items out, missing, event history
-- [ ] Roles: Admin / Staff
-- [ ] Admin-invite-only registration (no public signup)
-
-User clarifications captured during questioning:
-- [ ] Dedicated QR check-out and check-in pages (scanner-first)
-- [ ] Post-scan event picker (assign to Event A vs Event B)
-- [ ] Return-to-inventory flow on check-in
-- [ ] Backup team support per event (multiple teams can act on one event)
-
-Research-added (cheap now, expensive to retrofit):
-- [ ] Item lifecycle states (`available` / `checked_out` / `damaged` / `retired`) — prevents the "damaged on return" limbo
-- [ ] Audit log / activity history (per-item chronological feed)
+To be validated in Phase 2 (Functionality):
+- [ ] Real Firebase Auth wiring (sign-in, session cookie, password reset, invite delivery)
+- [ ] Firestore data layer wiring (every UI mutator currently calls mock store → swap to Server Actions)
+- [ ] Atomic Firestore transactions enforcing stock invariants server-side (defense in depth)
+- [ ] Real-time Firestore listeners replacing useSyncExternalStore subscription
+- [ ] Firestore Security Rules enforcing role-based access and event.allowedStaff visibility
+- [ ] firestore.rules + firestore.indexes.json shipped and tested
+- [ ] Production-ready scanner barcode formats (validated against real customer barcodes — open clarification)
+- [ ] Email delivery for invites + low-stock alerts (Firebase built-in vs SendGrid — open clarification)
+- [ ] Photo storage (item photos, damage attachments — open clarification)
 
 ### Out of Scope
 
@@ -147,11 +152,11 @@ Research-added (cheap now, expensive to retrofit):
 
 | # | Decision | Rationale | Outcome |
 |---|----------|-----------|---------|
-| 1 | Phase split: exactly 2 phases (UI POC, Functionality) | User-stated preference; UI-first lets stakeholders see+approve full surface before backend cost | Pending (locked at init) |
+| 1 | Phase split: exactly 2 phases (UI POC, Functionality) | User-stated preference; UI-first lets stakeholders see+approve full surface before backend cost | Confirmed (Phase 1 shipped 2026-05-25) |
 | 2 | Admin-invite-only registration via Firebase password-reset link | Built-in signed time-limited URL — no custom invite-token surface to secure | Pending |
 | 3 | Single-tenant deploy | Scope discipline; multi-tenant changes data model + rules + auth significantly | Pending |
-| 4 | Bulk-qty model for inventory (no serials in v1) | User said "quantity available"; serial tracking is a v2 add via `is_serialized` flag | Pending |
-| 5 | Item lifecycle states + audit log added to v1 | Schema-cheap now, schema-rewrite expensive later. Every competitor does this | Pending |
+| 4 | Bulk-qty model for inventory (no serials in v1) | User said "quantity available"; serial tracking is a v2 add via `is_serialized` flag | Confirmed (Phase 1 — types + mock store implement bulk qty) |
+| 5 | Item lifecycle states + audit log added to v1 | Schema-cheap now, schema-rewrite expensive later. Every competitor does this | Confirmed (Phase 1 — lifecycleState enum + RecentActivityFeed + per-item history tab) |
 | 6 | Reservations deferred to v2 | Detect-at-checkout is acceptable for v1; schema designed so reservations slot in later | Pending |
 | 7 | Hybrid lifecycle: immutable `transactions` ledger + mutable `inventory.availableQty` projection | O(1) reads + full audit | Pending |
 | 8 | Firebase session cookies (`__session`) via `next-firebase-auth-edge` v1.12+, NOT raw ID tokens | Server-revocable, 5-day expiry vs 1-hour ID tokens, httpOnly | Pending |
@@ -159,21 +164,26 @@ Research-added (cheap now, expensive to retrofit):
 | 10 | Defense in depth for auth: proxy (optimistic) + DAL (verifySession) + Server Action (re-verify) + Firestore Rules | Server Actions are POST-reachable — single-layer auth is insufficient | Pending |
 | 11 | `proxy.ts` not `middleware.ts` (Next.js 16 rename); Node.js runtime | Verified in local Next 16 docs; Edge unsupported in proxy | Pending |
 | 12 | Cache Components / PPR OFF for v1 | App is user-specific dashboards — PPR adds complexity without measurable benefit | Pending |
-| 13 | No global state library (no Redux/Zustand/Jotai in MVP) | Server Components + URL params + Firestore listeners + React state covers it | Pending |
+| 13 | No global state library (no Redux/Zustand/Jotai in MVP) | Server Components + URL params + Firestore listeners + React state covers it | Confirmed (Phase 1 — useSyncExternalStore over mock store + useUrlTableState; no library added) |
 | 14 | Document IDs for inventory = SKU | Free Firestore uniqueness + O(1) scan lookup | Pending |
-| 15 | QR-first encoding for new labels; scanner accepts QR + Code 128 + EAN-13 + UPC-A + Data Matrix | QR denser + more damage-tolerant; legacy 1D codes still readable | Pending |
-| 16 | Scanner library: `@yudiel/react-qr-scanner` (ZXing-backed) | Best React-first option; `html5-qrcode` has open iOS Safari issues | Pending |
-| 17 | Mock data lives in `lib/mock/` during Phase 1; replaced wholesale in Phase 2 | Clean boundary; no leaked mocks in shipped code | Pending |
-| 18 | UI follows shadcn `radix-nova` style + `neutral` base | Already in `components.json`; verify all 19 expected tokens present in `app/globals.css` | Pending |
-| 19 | All planning docs committed to git (`commit_docs: true`) | Standard GSD posture for solo-owner repos | Pending |
-| 20 | Phase IDs use `phase-kayinleong-NN`; quick tasks `quick-kayinleong-NNN` | Per global CLAUDE.md owner-slug rule (derived from `ka.yin.leong`) | Pending |
+| 15 | QR-first encoding for new labels; scanner accepts QR + Code 128 + EAN-13 + UPC-A + Data Matrix | QR denser + more damage-tolerant; legacy 1D codes still readable | Confirmed (Phase 1 — 5 formats live in ScannerWidget; bwip-js QR for labels) |
+| 16 | Scanner library: `@yudiel/react-qr-scanner` (ZXing-backed) | Best React-first option; `html5-qrcode` has open iOS Safari issues | Confirmed (Phase 1 — v2.6.0 installed, 5 formats verified) |
+| 17 | Mock data lives in `lib/mock/` during Phase 1; replaced wholesale in Phase 2 | Clean boundary; no leaked mocks in shipped code | Confirmed (Phase 1 — `lib/mock/*` shipped; Phase 2 swap surface preserved per Plan 02 design) |
+| 18 | UI follows shadcn `radix-nova` style + `neutral` base | Already in `components.json`; verify all 19 expected tokens present in `app/globals.css` | Confirmed (Phase 1 — tokens locked in `app/globals.css`, 28 shadcn components installed) |
+| 19 | All planning docs committed to git (`commit_docs: true`) | Standard GSD posture for solo-owner repos | Confirmed (Phase 1 — all CONTEXT/PATTERNS/PLAN/SUMMARY artifacts committed) |
+| 20 | Phase IDs use `phase-kayinleong-NN`; quick tasks `quick-kayinleong-NNN` | Per global CLAUDE.md owner-slug rule (derived from `ka.yin.leong`) | Confirmed (Phase 1 — all 13 plans + commits prefixed correctly) |
 
 ## Context
 
 - Greenfield project. Repo was initialized with `npx create-next-app` (Next 16.2.6) and `npx shadcn init` (v4, radix-nova/neutral) before GSD bootstrap. `package.json` has `next@16.2.6`, `react@19.2.4`, `shadcn@^4.8.0`, `radix-ui@^1.4.3`, `tailwindcss@^4`, `lucide-react@^1.16.0`, `tw-animate-css@^1.4.0`.
 - No `.env.local` yet; Firebase config will be added during Phase 2 Block A.
-- No git history before this commit — `git init` ran at project start.
-- Phase 1 expected to ship without ever touching `.env.local`, Firebase keys, or any networked backend.
+- Phase 1 shipped 2026-05-25 without ever touching `.env.local`, Firebase keys, or any networked backend (NFR-04 confirmed).
+
+## Current State
+
+**Phase 1 (UI POC) complete (2026-05-25).** All 22 routes in the locked sitemap render end-to-end against a typed mock store. Camera scanner live with 5 decode formats. Role gates enforced. Stakeholder approved the 10-step acceptance demo.
+
+**Phase 2 (Functionality) — not started.** Next: `/gsd-discuss-phase 2` to scope the Firebase Auth + Firestore + transactions + rules + indexes work. Open clarifications carried into Phase 2 planning (recorded in STATE.md): existing barcodes vs all-new labels, expected inventory volume → indexing strategy, email delivery provider (Firebase built-in vs SendGrid), photo storage scope (item + damage attachments), `next-firebase-auth-edge` v1.12 stability (1-day spike recommended at Phase 2 start).
 
 ## Evolution
 
@@ -193,4 +203,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-24 after initialization*
+*Last updated: 2026-05-25 after Phase 1 closure*
