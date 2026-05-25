@@ -6,7 +6,7 @@
 - started: 2026-05-25
 - status: in-progress
 - summary: Functionality — wire Firebase Auth + Firestore + 2 Cloud Functions + Storage; replace every mock with real backend; UI surface frozen from Phase 1
-- current plan: 02-06 (inventory UI swap + photo field + cursor URLs — Wave 6, Block C); 02-05 done; 02-04 deferred verifications still open
+- current plan: 02-07 (TBD — next wave); 02-06 code complete (awaiting E2E + Block C rules audit); 02-04 deferred verifications still open
 
 ## What will change
 
@@ -144,6 +144,27 @@ User-attested manual Firebase Console Rules Playground audit per D-06 mitigation
 - Verification gates: `npx tsc --noEmit` PASS, `npm run lint` PASS (1 pre-existing Phase 1 DataTable warning untouched), `npm run build` PASS (28 routes, proxy.ts recognized).
 - See `.planning/phases/phase-kayinleong-02/02-05-inventory-data-layer-and-actions-SUMMARY.md`.
 - **Plan 02-05 complete (2026-05-25)** — autonomous plan, no checkpoint expected; UI swap follows in plan 02-06.
+
+### Plan 02-06 (inventory UI swap + photo field + cursor URLs — Wave 6, Block C) — code complete; E2E + Block C rules audit pending (2026-05-25)
+
+- `lib/hooks/use-url-table-state.ts` (MOD): D-17 migration — `state.cursor` replaces `state.page`; `setCursor` replaces `setPage`; `setGlobalFilter` / `setSort` / `setFilter` all clear cursor per RESEARCH P9 (4 × `n.delete("cursor")` in the file). `pending` from useTransition exposed. Commit `0538e31`.
+- `components/feature/table/DataTable.tsx` (Rule 3 deviation, NOT in plan files_modified): migrated from `useUrlTableState.setPage` → internal TanStack `PaginationState` so the 7 not-yet-migrated tables (EventsTable, HistoryTable, MissingItemsTable, RepurchaseTable, StockReportTable, ItemsOutTable, UsersTable) compile. Commit `0538e31`.
+- `lib/hooks/use-transactions-live.ts` (NEW): onSnapshot-backed audit feed hook scoped by itemId / eventId / actorUid / type. 50-row window per D-20; `orderBy("at", "desc")`. Composite indexes from plan 02-02 cover all single-filter cases. Commit `456fa04`.
+- `components/feature/inventory/ItemPhotoField.tsx` (NEW): D-15 photo field. File picker (hidden input + "Choose file" Button) + "Take photo" inline `getUserMedia` with rear camera + iOS permission-denied copy (ScannerWidget pattern reuse per D-11). Calls `uploadItemPhoto(itemId, file)` (compresses to 0.3MB / 1600px / JPEG q=0.85 then writes `items/{itemId}/photo.jpg`). Plain `<img>` preview (eslint-disabled) for the dynamic Firebase Storage download URL. Commit `456fa04`.
+- 4 Server Component pages swapped: `app/(app)/inventory/{page.tsx, new/page.tsx, [itemId]/page.tsx, [itemId]/edit/page.tsx}` — `requireSession` / `requireAdmin` / `verifySession` from real DAL replace mock-session imports; `getInventoryPage(searchParams)` SSR seed + `getItemServer(itemId)` Admin SDK reads. Commit `8ae847f`.
+- `components/feature/inventory/InventoryTable.tsx` (MOD): bypasses generic `<DataTable>` wrapper, drives `useReactTable({manualPagination: true, pageCount: -1})` directly; consumes `initialItems` + `nextCursor` props from SSR; `useInventoryLive(initialItems)` for live updates; Prev/Next chrome (no page-N/M). All D-11 sortable-column rules preserved. Commit `b2808ec`.
+- `components/feature/inventory/ItemForm.tsx` (MOD): `createItem` / `updateItem` Server Actions + setError("sku", …) for SKU_EXISTS / Zod fieldErrors. `ItemPhotoField` rendered conditionally on SKU presence (new) or always (edit). totalQty locked in edit mode (INV-04). Commit `b2808ec`.
+- `components/feature/inventory/RetireItemButton.tsx` (MOD): `retireItem` Server Action; ITEM_OUT / ITEM_NOT_FOUND surfaced via toast.error. Commit `b2808ec`.
+- `components/feature/inventory/ItemHistoryTab.tsx` (MOD): `useTransactionsLive({itemId, limit:50})` replaces `selectTransactionsForItem` mock selector. Commit `b2808ec`.
+- `components/feature/inventory/AdjustStockDialog.tsx` (NEW): admin-only Dialog calling `adjustItemStock` Server Action with required-reason field (preset + Other fallback). AdjustStockSchema enforces `delta != 0` and `reason.min(1)`. WOULD_GO_NEGATIVE surfaced via toast. Commit `b2808ec`.
+- `components/feature/settings/LowStockThresholdsCard.tsx` (MOD): `useInventoryLive` replaces mock store; `updateLowStockThreshold` Server Action replaces mock mutator; per-row inline save with pending state. Commit `b2808ec`.
+- `components/feature/inventory/ItemDetail.tsx` (Rule 3 deviation, NOT in plan files_modified): surfaced AdjustStockDialog (admin-only) alongside Edit + Retire; added small `<img>` photo preview to header (D-15 visibility). Without these, Task 5 Step B smoke test cannot proceed. Commit `b2808ec`.
+- Deviations (auto-fixes, both Rule 3):
+  - D-K01 — DataTable.tsx migration off setPage (acceptance criterion conflicted with not-yet-migrated table consumers).
+  - D-K02 — ItemDetail.tsx surfaces AdjustStockDialog + photo (verification cannot pass without UI affordance).
+- Verification gates: `npx tsc --noEmit` PASS, `npm run lint` PASS (0 errors, 5 warnings — pre-existing React Compiler "incompatible-library" diagnostics; identical to the 1 Phase 1 warning, multiplied), `npm run build` PASS (28 routes, proxy.ts recognized).
+- See `.planning/phases/phase-kayinleong-02/02-06-inventory-ui-photo-and-cursor-SUMMARY.md`.
+- **Plan 02-06 gate:** awaiting end-to-end inventory smoke (create + photo + adjust + retire + cursor) + Block C rules audit (6 Firestore + 4 Storage Rules Playground cases) per SUMMARY.md CHECKPOINT section.
 
 ## Verification
 
