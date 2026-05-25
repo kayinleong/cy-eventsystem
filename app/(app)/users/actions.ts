@@ -63,8 +63,32 @@ export async function inviteUser(formData: FormData) {
     };
     const resetLink = await adminAuth.generatePasswordResetLink(email, actionCodeSettings);
 
+    // 3b. Trigger Firebase to ALSO send the templated email (D-07).
+    // Admin SDK's generatePasswordResetLink does NOT auto-send the email — it just
+    // generates the URL. The Identity Toolkit REST API's sendOobCode endpoint fires
+    // the templated email using Firebase's built-in delivery infrastructure.
+    // Non-fatal: if this fails (rate limit, transient), the resetLink in the response
+    // payload is the primary delivery path per D-09 (Copy-link UI).
+    const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+    let emailSent = false;
+    if (apiKey) {
+      try {
+        const res = await fetch(
+          `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ requestType: "PASSWORD_RESET", email }),
+          },
+        );
+        emailSent = res.ok;
+      } catch {
+        // Swallow — resetLink in response is the fallback per D-09
+      }
+    }
+
     revalidatePath("/users");
-    return { ok: true as const, uid: userRecord.uid, resetLink };
+    return { ok: true as const, uid: userRecord.uid, resetLink, emailSent };
   } catch (err) {
     // Firebase Auth errors have a `.code` (e.g., "auth/email-already-exists")
     const code = (err as { code?: string }).code;
