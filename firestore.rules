@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // -------- helpers --------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.role == 'admin';
+    }
+    function isMember(eventDoc) {
+      return isSignedIn() && (
+        request.auth.token.role == 'admin'
+        || request.auth.uid in eventDoc.data.allowedStaff
+      );
+    }
+    function untouched(field) {
+      return !(field in request.resource.data)
+        || request.resource.data[field] == resource.data[field];
+    }
+
+    // -------- users (UA-01..06) --------
+    match /users/{uid} {
+      // Any signed-in user can read their own doc; admins can read any.
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      // Block ALL client writes. Cloud Function 1 (Admin SDK) and
+      // Server Actions are the only writers — both bypass rules.
+      // T-02-02-09 (elevation of privilege) mitigation.
+      allow create, update, delete: if false;
+    }
+
+    // -------- inventory (INV-01..05, INT-02) --------
+    match /inventory/{itemId} {
+      allow read: if isSignedIn();
+      // Admin-only create/delete; admin-only update with invariant.
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin()
+        && request.resource.data.availableQty is number
+        && request.resource.data.availableQty >= 0
+        && request.resource.data.availableQty <= request.resource.data.totalQty;
+    }
+
+    // -------- events (EVT-01..09) --------
+    match /events/{eventId} {
+      allow read: if isSignedIn() && isMember(resource);
+      // EVT-01: admin OR team lead can create — narrower check in Server Action.
+      allow create: if isSignedIn();
+      // Admin OR team lead can edit; allowedStaff is server-managed
+      // (Cloud Function 2) so clients cannot mutate it (T-02-02-07).
+      allow update: if (isAdmin() || request.auth.uid in resource.data.teamLeads)
+        && untouched('allowedStaff');
+      allow delete: if isAdmin();
+    }
+
+    // -------- transactions (immutable, server-only writes — INT-03, AUD-04) --------
+    match /transactions/{txId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if false;
+    }
+
+    // -------- missingItems (server-only writes — MIS-01..04) --------
+    match /missingItems/{missingId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if false;
+    }
+
+    // -------- catch-all deny-by-default (D-06 mitigation a) --------
+    // Anything not explicitly allowed above is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
