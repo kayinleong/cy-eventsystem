@@ -1,24 +1,28 @@
 // /login client form — react-hook-form + Zod 4 + shadcn v4 <Field> primitives.
 //
-// AUTH-01 — sign-in. CONTEXT.md D-08 — look up against seedUsers; the literal
-// password is "password". Disabled users cannot sign in (AUTH-09).
+// AUTH-01 — sign-in via Firebase signInWithEmailAndPassword + POST to
+// /api/auth/session. The proxy (proxy.ts) intercepts the POST, mints the
+// HMAC-signed __session cookie envelope, and the form follows up with a
+// HARD navigation to "/" so proxy.ts re-evaluates with the new cookie
+// before any prefetch (RESEARCH §1.8 line 441).
 //
-// IMPORTANT (Plan 01 deviation D-01-01-A): shadcn v4 ships the canonical
-// `<Field>` / `<FieldLabel>` / `<FieldError>` primitives — the legacy v3
-// `<Form>` / `<FormField>` Context wrapper was removed. We bind
-// react-hook-form's `register` directly here.
+// Error UX (T-02-03-05 — no email-enumeration oracle): a single generic
+// "Wrong email or password." line attached to the password field, regardless
+// of root cause (unknown email, bad password, disabled user, network error).
+//
+// shadcn v4 ships `<Field>` / `<FieldLabel>` / `<FieldError>` primitives
+// (legacy v3 `<Form>` Context wrapper was removed); we bind rhf's `register`
+// directly here.
 
 "use client";
 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import Link from "next/link";
-import { toast } from "sonner";
 
+import { auth } from "@/lib/firebase/client";
 import { LoginSchema, type LoginInput } from "@/lib/schemas/auth";
-import { seedUsers } from "@/lib/mock/users";
-import { writeMockSessionClient } from "@/lib/mock/cookie";
 import {
   Field,
   FieldGroup,
@@ -29,7 +33,6 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
 export function LoginForm() {
-  const router = useRouter();
   const {
     register,
     handleSubmit,
@@ -41,28 +44,35 @@ export function LoginForm() {
     defaultValues: { email: "", password: "" },
   });
 
-  function onSubmit(values: LoginInput) {
-    // CONTEXT.md D-08 — Phase 1 lookup against seed array; Phase 2 swaps
-    // to Firebase signInWithEmailAndPassword.
-    const user = seedUsers.find(
-      (u) => u.email.toLowerCase() === values.email.toLowerCase()
-    );
-    if (!user || values.password !== "password" || user.disabled) {
-      // UI-SPEC error copy: "Wrong email or password." attached to the
-      // password field so the error string anchors below the input.
+  async function onSubmit(values: LoginInput) {
+    try {
+      // 1. Authenticate with Firebase Auth (Web SDK).
+      const cred = await signInWithEmailAndPassword(
+        auth,
+        values.email,
+        values.password,
+      );
+
+      // 2. Get fresh ID token (forced refresh to ensure latest custom claims).
+      const idToken = await cred.user.getIdToken();
+
+      // 3. POST to /api/auth/session — proxy.ts authMiddleware intercepts
+      //    this path (loginPath) and mints the HMAC-signed __session cookie
+      //    envelope before the request reaches the route handler.
+      const res = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      if (!res.ok) throw new Error("session-create-failed");
+
+      // 4. Hard nav so proxy.ts re-evaluates with the new cookie before any
+      //    Next.js prefetch can fire (RESEARCH §1.8 line 441).
+      window.location.assign("/");
+    } catch {
+      // T-02-03-05: single generic error regardless of cause. Do not surface
+      // Firebase error codes — they leak whether an email exists.
       setError("password", { message: "Wrong email or password." });
-      return;
     }
-    writeMockSessionClient({
-      uid: user.uid,
-      displayName: user.displayName,
-      email: user.email,
-      role: user.role,
-      disabled: user.disabled,
-    });
-    toast.success("Signed in");
-    router.push("/");
-    router.refresh();
   }
 
   return (
@@ -99,7 +109,7 @@ export function LoginForm() {
       </FieldGroup>
 
       <Button type="submit" className="w-full" disabled={isSubmitting}>
-        Sign in
+        {isSubmitting ? "Signing in…" : "Sign in"}
       </Button>
 
       <div className="text-center">
