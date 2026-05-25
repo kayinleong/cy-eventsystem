@@ -1,20 +1,19 @@
 // (app) layout — role gate spine for every authenticated route.
 //
-// CONTEXT.md D-05/D-07 — reads the mock_session cookie via the Phase 1
-// server helper (requireSession), redirects to /login if missing or disabled.
-// Per-route admin gates (requireAdmin) are imposed by individual admin-only
-// pages (`/users`, `/users/invite`, `/inventory/new`, `/inventory/[id]/edit`,
-// `/events/new`) and bounce the user to `/unauthorized` (this group's
-// unauthorized page) rather than back to /login.
+// Reads the __session cookie via the Phase 2 DAL (requireSession), redirects
+// to /login if missing or disabled. Per-route admin gates (requireAdmin) are
+// imposed by individual admin-only pages (`/users`, `/users/invite`,
+// `/inventory/new`, `/inventory/[id]/edit`, `/events/new`) and bounce the
+// user to `/unauthorized` (this group's unauthorized page) rather than back
+// to /login.
 //
 // Server Component — MUST NOT have `'use client'`. Next 16's async cookies()
 // is invoked inside `requireSession()`.
 //
-// Phase 2 swap surface: only the body of `requireSession()` changes (cookie
-// decoder swaps from JSON.parse to next-firebase-auth-edge verifyTokens()).
-// The layout's JSX and the AppSidebar/TopBar contracts stay identical.
+// The layout's JSX and the AppSidebar/TopBar contracts stay identical to
+// Phase 1 — only the requireSession() import path swaps to the real DAL.
 
-import { requireSession } from "@/lib/auth/mock-session";
+import { requireSession } from "@/lib/auth/dal";
 import { AppSidebar } from "@/components/feature/shell/AppSidebar";
 import { TopBar } from "@/components/feature/shell/TopBar";
 

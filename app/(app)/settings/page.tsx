@@ -1,4 +1,4 @@
-// Phase 1 — /settings page.
+// /settings page.
 //
 // REQUIREMENTS:
 //   - UI-SPEC sitemap: /settings reachable from sidebar by admin AND staff.
@@ -12,15 +12,14 @@
 // items with thresholds (no Save button, inputs disabled, descriptive copy
 // explaining the gate). Admins see editable inputs + per-row Save action.
 //
-// The (app)/layout.tsx role gate (Plan 04) already enforced auth, so
-// getMockSession() is safe here — no requireSession() / redirect needed.
-// The defensive null-check on session?.role mirrors the dashboard pattern
-// (D-01-05-D).
+// The (app)/layout.tsx role gate already enforced auth, so getSession() is
+// safe here — no requireSession() / redirect needed. The defensive null-
+// check on session?.role mirrors the dashboard pattern (D-01-05-D).
 
 import type { Metadata } from "next";
 
 import { PageHeader } from "@/components/ui/page-header";
-import { getMockSession } from "@/lib/auth/mock-session";
+import { getSession as getMockSession } from "@/lib/auth/dal";
 import { ThemePreferencesCard } from "@/components/feature/settings/ThemePreferencesCard";
 import { LowStockThresholdsCard } from "@/components/feature/settings/LowStockThresholdsCard";
 

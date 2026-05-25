@@ -1,20 +1,18 @@
-// Phase 1 dashboard route — `/`.
+// Dashboard route — `/`.
 //
-// CONTEXT.md D-07 — this route lives in the (app) route group so the
-// `(app)/layout.tsx` role gate (Plan 04) runs first and redirects anonymous
-// users to /login. `getMockSession()` here never returns null at runtime
-// because the layout has already required a session — we use it only to
-// greet the user by first name.
+// This route lives in the (app) route group so the `(app)/layout.tsx` role
+// gate runs first and redirects anonymous users to /login. `getSession()`
+// here never returns null at runtime because the layout has already
+// required a session — we use it only to greet the user by first name.
 //
-// Server Component shell that composes the 5 client widgets built in Plan
-// 01-05 Task 1. Widgets subscribe to the mock store via
-// useSyncExternalStore — any later-plan mutation (checkout, checkin,
-// resolveMissing, markLowStockOrdered) causes them to re-render with fresh
-// values. PageHeader is the UI-SPEC primitive from Plan 03.
+// Server Component shell that composes the 5 client widgets. Widgets still
+// subscribe to the mock store via useSyncExternalStore in this plan — the
+// dashboard real-time swap to Firestore count() aggregations + live hooks
+// is plan 02-10 (Block G). PageHeader is the UI-SPEC primitive from Plan 03.
 
 import type { Metadata } from "next";
 
-import { getMockSession } from "@/lib/auth/mock-session";
+import { getSession as getMockSession } from "@/lib/auth/dal";
 import { PageHeader } from "@/components/ui/page-header";
 import { KpiCards } from "@/components/feature/dashboard/KpiCards";
 import { ActiveEventsWidget } from "@/components/feature/dashboard/ActiveEventsWidget";
