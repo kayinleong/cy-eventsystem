@@ -1,18 +1,19 @@
-// Phase 1 — Event detail surface.
+// Phase 2 — Event detail surface (Block D UI swap, plan 02-07).
 //
 // REQUIREMENTS:
 //   - EVT-02 — status transitions: planned → active → completed (or cancelled).
 //     Primary CTA depends on current status:
-//       - planned → "Start check-out" → /events/[id]/checkout (Plan 09)
-//       - active  → "Check in"        → /events/[id]/checkin  (Plan 10)
+//       - planned → "Start check-out" → /events/[id]/checkout (Plan 02-08)
+//       - active  → "Check in"        → /events/[id]/checkin  (Plan 02-09)
 //       - completed / cancelled → no primary CTA
 //   - EVT-04 — detail surface includes Assigned items + History tabs.
 //   - EVT-05 — Edit button visible to admin OR any team lead of the event.
 //   - EVT-06 — Cancel event admin-only and only when status is not terminal.
 //
-// This is a Client Component because the cancel dialog + assigned/history tabs
-// subscribe to the live mock store. The page (Server Component) reads the
-// snapshot once for SSR and passes the static `event` + role flags in.
+// Phase 2 swap: removed mock-store users subscription; the parent page seeds
+// users via SSR and passes them in. Tabs are unchanged at the call-site —
+// they subscribe to Firestore via use-transactions-live + use-events-live
+// internally.
 
 "use client";
 
@@ -33,8 +34,7 @@ import {
   statusToLabel,
 } from "@/components/feature/status/status-to-tone";
 import type { EventDoc } from "@/lib/types/event";
-import { useMockStore } from "@/lib/hooks/use-mock-store";
-import { selectUserByUid } from "@/lib/mock/selectors";
+import type { UserDoc } from "@/lib/types/user";
 import { EventAssignedItemsTab } from "./EventAssignedItemsTab";
 import { EventHistoryTab } from "./EventHistoryTab";
 import { CancelEventDialog } from "./CancelEventDialog";
@@ -49,21 +49,19 @@ function fmt(iso: string): string {
 
 export function EventDetail({
   event,
+  users,
   isAdmin,
   canEdit,
 }: {
   event: EventDoc;
+  users: UserDoc[];
   isAdmin: boolean;
   canEdit: boolean;
 }) {
-  // Read live users so the team-member chips reflect renames + role changes
-  // without a server roundtrip.
-  const users = useMockStore((s) => s.users);
+  // Resolve uid → display name from the SSR-seeded users list. Falls back
+  // to the uid when the user has been deleted (defensive).
   const resolveName = (uid: string) =>
     users.find((u) => u.uid === uid)?.displayName ?? uid;
-
-  // Silence unused warning for the imported selector (kept for Phase 2 use).
-  void selectUserByUid;
 
   const primary =
     event.status === "planned"

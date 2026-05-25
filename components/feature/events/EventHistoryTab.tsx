@@ -1,13 +1,14 @@
-// Phase 1 — Event detail "History" tab.
+// Phase 2 — Event detail "History" tab (Block D UI swap, plan 02-07).
 //
 // REQUIREMENTS:
 //   - AUD-03 — chronological transactions for the event (newest first).
 //   - AUD-01 — each row shows the actor's role at write-time (the denormalized
 //     `actorRoleAtTimeOfAction` snapshot from the transaction record).
 //
-// Subscribes to the mock store via `useMockStore` so any later mutation
-// (checkout, checkin, missing, cancellation) re-renders the feed without a
-// server roundtrip. Mirrors the inventory `ItemHistoryTab` shape.
+// Subscribes to the transactions collection via useTransactionsLive scoped
+// to {eventId} so any later mutation (checkout, checkin, missing,
+// cancellation) re-renders the feed without a server roundtrip. Mirrors the
+// inventory ItemHistoryTab shape from plan 02-06.
 
 "use client";
 
@@ -15,8 +16,7 @@ import Link from "next/link";
 import { Activity } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
-import { useMockStore } from "@/lib/hooks/use-mock-store";
-import { selectTransactionsForEvent } from "@/lib/mock/selectors";
+import { useTransactionsLive } from "@/lib/hooks/use-transactions-live";
 import { StatusBadge } from "@/components/feature/status/StatusBadge";
 import {
   statusToTone,
@@ -40,7 +40,9 @@ function actionVerb(type: string): string {
 }
 
 export function EventHistoryTab({ eventId }: { eventId: string }) {
-  const txs = useMockStore((s) => selectTransactionsForEvent(s, eventId));
+  // Composite index transactions(eventId, at desc) from plan 02-02 covers
+  // this query. 100-row limit is enough for typical event audit history.
+  const txs = useTransactionsLive({ eventId, limit: 100 });
 
   if (txs.length === 0) {
     return (

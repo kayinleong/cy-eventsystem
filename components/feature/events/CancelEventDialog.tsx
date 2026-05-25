@@ -1,9 +1,11 @@
-// Phase 1 — CancelEventDialog (EVT-06 reconciliation).
+// Phase 2 — CancelEventDialog (EVT-06 reconciliation, plan 02-07).
 //
 // REQUIREMENTS:
-//   - EVT-06 — cancelling an event requires reconciling open check-outs: each
-//     open transaction gets a `returned | lost | still_with_owner` resolution
-//     that the store mutator (`cancelEvent`) uses to adjust availableQty + outQty.
+//   - EVT-06 — cancelling an event requires reconciling open check-outs:
+//     each open transaction gets a `returned | lost | still_with_owner`
+//     resolution that the cancelEvent Server Action uses to adjust
+//     availableQty + outQty + audit-row writes inside a single
+//     runTransaction.
 //
 // UI-SPEC Q9 destructive copy (locked, exact match):
 //   title:   "Cancel this event?"
@@ -11,13 +13,22 @@
 //             won't appear in future schedules."
 //   confirm: "Cancel event"   ← Confirm button label, NEVER "OK" or "Yes".
 //
+// Phase 2 swap:
+//   - mock-store cancelEvent → @/app/(app)/events/actions cancelEvent
+//   - selectOpenCheckoutsForEvent → useTransactionsLive + client-side
+//     "no parentTxId-pointing-checkin" filter.
+//   - reconciliation map is keyed by TRANSACTION ID (not itemId) so the
+//     Server Action can read the canonical open-checkout document by id
+//     and reconcile exact qty per line. This is a contract change vs.
+//     Phase 1 (which keyed by itemId + qty), aligned to the Server Action
+//     signature in CancelEventReconciliationSchema.
+//
 // Gating: only admin sees this button (defense in depth — the cancelEvent
-// mutator is also called only from admin-visible UI in Phase 1). Phase 2's
-// Server Action will additionally enforce admin role server-side.
+// Server Action also requires requireAdmin server-side).
 
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Ban } from "lucide-react";
 import { toast } from "sonner";
@@ -41,11 +52,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useMockStore } from "@/lib/hooks/use-mock-store";
-import { selectOpenCheckoutsForEvent } from "@/lib/mock/selectors";
-import { cancelEvent } from "@/lib/mock/store";
-import { seedUsers } from "@/lib/mock/users";
-import { useCurrentUser } from "@/lib/hooks/use-current-user";
+import { useTransactionsLive } from "@/lib/hooks/use-transactions-live";
+import { cancelEvent } from "@/app/(app)/events/actions";
 
 type Resolution = "returned" | "lost" | "still_with_owner";
 
@@ -57,31 +65,56 @@ export function CancelEventDialog({
   eventName: string;
 }) {
   const router = useRouter();
-  const session = useCurrentUser();
-  const openTxs = useMockStore((s) => selectOpenCheckoutsForEvent(s, eventId));
-  // Per-open-tx resolution map. Default to "returned" (the most common path —
-  // items came back, just not yet logged via checkin).
+  const [submitting, setSubmitting] = useState(false);
+
+  // Pull all transactions for this event then derive open checkouts client-
+  // side (same logic as the EventAssignedItemsTab and the Server Action's
+  // getOpenCheckoutsForEventServer).
+  const allTxs = useTransactionsLive({ eventId, limit: 100 });
+  const openTxs = useMemo(() => {
+    const checkedInParents = new Set(
+      allTxs
+        .filter((t) => t.type === "checkin" && t.parentTxId)
+        .map((t) => t.parentTxId as string),
+    );
+    return allTxs.filter(
+      (t) => t.type === "checkout" && !checkedInParents.has(t.id),
+    );
+  }, [allTxs]);
+
+  // Per-open-tx resolution map keyed by transaction id. Default to
+  // "returned" (the most common path — items came back, just not yet
+  // logged via checkin).
   const [resolutions, setResolutions] = useState<Record<string, Resolution>>(
-    () => Object.fromEntries(openTxs.map((t) => [t.id, "returned" as const])),
+    {},
   );
 
-  if (session?.role !== "admin") return null;
+  // Effective map for submit: defaults to "returned" for any tx the user
+  // didn't explicitly change.
+  const effectiveResolutions = useMemo(() => {
+    return openTxs.reduce<Record<string, Resolution>>((acc, t) => {
+      acc[t.id] = resolutions[t.id] ?? "returned";
+      return acc;
+    }, {});
+  }, [openTxs, resolutions]);
 
-  function confirm() {
-    const actor = seedUsers.find((u) => u.uid === session?.uid);
-    if (!actor) {
-      toast.error("Couldn't cancel event");
-      return;
+  async function confirm() {
+    setSubmitting(true);
+    try {
+      const result = await cancelEvent({
+        eventId,
+        reconciliation: effectiveResolutions,
+      });
+      if (!result.ok) {
+        toast.error(result.error || "Couldn't cancel event");
+        return;
+      }
+      toast(`${eventName} cancelled`);
+      router.push("/events");
+      router.refresh();
+    } finally {
+      setSubmitting(false);
     }
-    const reconciliations = openTxs.map((t) => ({
-      itemId: t.itemId,
-      resolution: resolutions[t.id] ?? "returned",
-      qty: t.qty,
-    }));
-    cancelEvent(eventId, reconciliations, actor);
-    toast(`${eventName} cancelled`);
-    router.push("/events");
-    router.refresh();
   }
 
   return (
@@ -138,8 +171,12 @@ export function CancelEventDialog({
           </div>
         ) : null}
         <AlertDialogFooter>
-          <AlertDialogCancel>Keep event</AlertDialogCancel>
-          <AlertDialogAction onClick={confirm} variant="destructive">
+          <AlertDialogCancel disabled={submitting}>Keep event</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={confirm}
+            variant="destructive"
+            disabled={submitting}
+          >
             Cancel event
           </AlertDialogAction>
         </AlertDialogFooter>
