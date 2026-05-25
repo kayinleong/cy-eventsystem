@@ -6,7 +6,7 @@
 - started: 2026-05-25
 - status: in-progress
 - summary: Functionality — wire Firebase Auth + Firestore + 2 Cloud Functions + Storage; replace every mock with real backend; UI surface frozen from Phase 1
-- current plan: 02-03 (auth pages wired — Wave 3, Block A foundation)
+- current plan: 02-03 done (code-complete; seed-admin + E2E sign-in gate pending) → next: 02-04 (Block B users + invite + Cloud Function 1)
 
 ## What will change
 
@@ -79,6 +79,25 @@ User-attested manual Firebase Console Rules Playground audit per D-06 mitigation
 **Deploy command run:** `firebase deploy --only firestore:rules,firestore:indexes,storage` — succeeded, indexes READY/CREATING.
 
 **Note on audit attestation:** The 5 rows above are user-attested (the user manually ran the Playground tests during the smoke gate). Future plans (02-04..02-10) each have their own rules-touching audit checkpoint per D-06; results from those will append to this section as separate "Rules Audit — Block B/C/D/E/F/G" subsections.
+
+### Plan 02-03 (auth pages wired — Wave 3, Block A) — code complete; E2E seed + sign-in gate pending (2026-05-25)
+
+- `/login`: signInWithEmailAndPassword → POST /api/auth/session → hard-nav `/`. Generic error copy on failure (T-02-03-05 anti-enumeration). Commit 03c6a1d.
+- `/forgot-password`: sendPasswordResetEmail; always shows generic success branch (T-02-03-01 anti-enumeration). Commit 05899e4.
+- `/set-password`: verifyPasswordResetCode + confirmPasswordReset + D-08 auto-sign-in + POST /api/auth/session. Commit 05899e4.
+- `/register`: already returns notFound() per AUTH-06 — no change.
+- `(app)/layout.tsx` + `(app)/page.tsx` + `(app)/settings/page.tsx`: requireSession/getMockSession import path swap from `@/lib/auth/mock-session` → `@/lib/auth/dal` (aliased to keep call sites untouched). Commit f9d4f40.
+- `lib/hooks/use-current-user.ts`: REPLACED body with onAuthStateChanged + getIdTokenResult; KEPT useCurrentUser(): Session | null signature. Role from custom claims (Cloud Function 1 in plan 02-04 mirrors users/{uid}.role → token); defaults to "staff" until claims arrive. Commit f9d4f40.
+- `components/feature/auth/SignOutButton.tsx`: fetch /api/auth/logout + signOut(auth) + hard-nav /login (useTransition pending + best-effort try/catch). Commit e6d0021.
+- `components/feature/shell/UserMenu.tsx`: removed PhaseOnePocRoleSwitcher import + JSX. Commit e6d0021.
+- DELETED `components/feature/auth/PhaseOnePocRoleSwitcher.tsx` + `app/(auth)/login/_components/seed-users-disclosure.tsx`. Commit 390a218.
+- `scripts/seed-first-admin.ts` NEW (D-05): CLI script createsUser → setCustomUserClaims({role:'admin'}) → writes users/{uid} doc → prints Firebase password-reset link. T-02-03-06 (never logs password) + T-02-03-07 (refuses if users collection non-empty). Commit 390a218.
+- `package.json`: added `seed:first-admin` npm script. `.env.example`: added run-instruction comment. Commit 390a218.
+- `lib/auth/mock-session.ts` + `lib/mock/cookie.ts`: converted to shims per PATTERNS.md §3 "Option A" (12 (app) consumers route through to real DAL; both deleted in plan 02-11). Commit 390a218.
+- Auto-fixes (Rule 1/3): set-password-form `react-hooks/set-state-in-effect` compliance (derive init state from URL param + only setState after async); set-password page wrapped in <Suspense> for Next 16 prerender.
+- Verification gates: tsc --noEmit PASS, npm run lint PASS (1 pre-existing Phase 1 warning untouched), npm run build PASS (24 routes, proxy.ts recognized, /set-password builds static).
+- See `.planning/phases/phase-kayinleong-02/02-03-auth-pages-wired-SUMMARY.md` for full details + deviation register + manual verification checkpoint instructions.
+- **Plan 02-03 gate:** awaiting `npm run seed:first-admin` execution + manual E2E sign-in pass per SUMMARY.md "CHECKPOINT REACHED" section.
 
 ## Verification
 
