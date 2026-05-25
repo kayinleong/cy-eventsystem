@@ -125,6 +125,26 @@ User-attested manual Firebase Console Rules Playground audit per D-06 mitigation
 - See `.planning/phases/phase-kayinleong-02/02-04-users-cloud-function-and-actions-SUMMARY.md` for full details.
 - **Plan 02-04 gate:** awaiting `firebase deploy --only functions` + end-to-end invite/role/disable smoke tests + Block B rules audit per SUMMARY.md "CHECKPOINT REACHED" section.
 
+### Plan 02-05 (inventory data layer + 6 Server Actions — Wave 5, Block C) — complete (2026-05-25)
+
+- `lib/types/item.ts` (MOD): added required `isLowStock: boolean` derived field per RESEARCH P11 (Firestore `where()` cannot compare two fields → denormalize). Commit `7755412`.
+- `lib/schemas/item.ts` (MOD): added `isLowStock` to `ItemSchema`; new `computeIsLowStock` helper (single source of truth) + new `CreateItemSchema` / `UpdateItemSchema` / `AdjustStockSchema` for Phase 2 Server Action inputs. Commit `7755412`.
+- `lib/mock/items.ts` (MOD): converted `seedItems` to `rawSeedItems.map(i => ({...i, isLowStock: computeIsLowStock(...)}))` so Phase 1 mock surface stays TS-clean until 02-11 wipes it. Rule 3 auto-fix — plan called this "informational only" but TS compilation actually requires it. Commit `7755412`.
+- `lib/mock/store.ts` (MOD): `createItem` now populates `isLowStock` for 1:1 mock/Phase 2 contract. Commit `7755412`.
+- `package.json` (MOD): `browser-image-compression ^2.0.2` for the photo upload helper. Commit `7755412`.
+- `lib/data/inventory.server.ts` (NEW): server-only Admin SDK cursor-paged reads. `getInventoryPage({cursor, limit, filters})` + `getItemServer(itemId)`. Base64 `{name, id}` cursor; orderBy name + `__name__` for deterministic order; Timestamp → ISO conversion preserves Phase 1 contract. Mirrors `lib/data/users.server.ts` shape. Commit `232264f`.
+- `lib/hooks/use-inventory-live.ts` (NEW): Web SDK `onSnapshot` scoped to 50-row window per D-20. Defensive `FirestoreError` console.error handler (inventory rule allows any signed-in read, so the Plan 02-04 useUsersLive permission-denied fallout should not recur). Commit `232264f`.
+- `lib/storage/upload-photo.ts` (NEW): `uploadItemPhoto(itemId, file)` — compresses via browser-image-compression (0.3MB / 1600px / JPEG q=0.85) then uploads to `items/{itemId}/photo.jpg` (D-13/D-14 replace-only). Commit `20c015f`.
+- `app/(app)/inventory/actions.ts` (NEW): 6 Server Actions — `createItem` (INV-01/02 with SKU-uniqueness via `tx.get(docRef)` assert; `SKU_EXISTS` error), `updateItem` (INV-03; recomputes isLowStock if threshold supplied), `retireItem` (INV-05; refuses if `outQty > 0` via `ITEM_OUT` error per PITFALLS C5; force `isLowStock: false`; writes audit row), `adjustItemStock` (INV-04; required reason; `WOULD_GO_NEGATIVE` invariant guard; writes audit row inside same tx), `updateLowStockThreshold` (RP-01; clears `lowStockOrderedAt` on change), `markLowStockOrdered` (RP-04; single field update). All 6 gated by `requireAdmin()`; 5 wrap state changes in `adminDb.runTransaction` (INT-01); per RESEARCH P11 every action that touches availableQty or lowStockThreshold recomputes `isLowStock` atomically. `revalidatePath` matrix covers /inventory + /inventory/[itemId] + / (dashboard KPIs) + /reports/stock + /reports/repurchase as appropriate. Commit `0ad8a35`.
+- Deviations (auto-fixes, all Rule 1/3):
+  - Rule 1 — Plan snippet used `lifecycleState: "active"`; actual `ItemLifecycleState` enum is `"available" | "checked_out" | "damaged" | "retired"`. Used `"available"` for new items.
+  - Rule 3 — Extending `isLowStock` as a required field forced updates in `lib/mock/items.ts` + `lib/mock/store.ts` to keep TS compiling (plan called this "informational only" — incorrect). Single-source-of-truth `computeIsLowStock` keeps the seed from drifting.
+  - Rule 1 (own code) — Initial `ActionResult<T = Record<string, never>>` produced 5 TS2322 errors at `return { ok: true }`. Relaxed to `ActionResult<T extends object = object>`.
+- No new routes added (28 → 28). `firestore.rules`, `firestore.indexes.json`, `storage.rules`, `lib/firebase/admin.ts`, `lib/firebase/client.ts`, `lib/auth/dal.ts`, `proxy.ts`, `firebase.json` UNTOUCHED per plan must-not-do guards. Mock-session shim and `lib/mock/*` files still present (deletion deferred to 02-11).
+- Verification gates: `npx tsc --noEmit` PASS, `npm run lint` PASS (1 pre-existing Phase 1 DataTable warning untouched), `npm run build` PASS (28 routes, proxy.ts recognized).
+- See `.planning/phases/phase-kayinleong-02/02-05-inventory-data-layer-and-actions-SUMMARY.md`.
+- **Plan 02-05 complete (2026-05-25)** — autonomous plan, no checkpoint expected; UI swap follows in plan 02-06.
+
 ## Verification
 
 (Populated when phase completes — must include Regression Report per global CLAUDE.md.)
