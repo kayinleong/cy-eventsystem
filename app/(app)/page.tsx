@@ -1,18 +1,20 @@
 // Dashboard route — `/`.
 //
 // This route lives in the (app) route group so the `(app)/layout.tsx` role
-// gate runs first and redirects anonymous users to /login. `getSession()`
-// here never returns null at runtime because the layout has already
-// required a session — we use it only to greet the user by first name.
+// gate runs first and redirects anonymous users to /login. `requireSession()`
+// here additionally narrows the session type for the widgets — at runtime
+// the layout has already required a session, so we just re-read the cached
+// React.cache result.
 //
-// Server Component shell that composes the 5 client widgets. Widgets still
-// subscribe to the mock store via useSyncExternalStore in this plan — the
-// dashboard real-time swap to Firestore count() aggregations + live hooks
-// is plan 02-10 (Block G). PageHeader is the UI-SPEC primitive from Plan 03.
+// Server Component shell that composes the dashboard widgets. The events
+// widgets (Active + Overdue) take an SSR seed + session via plan 02-07
+// (Block D); KPI / LowStock / RecentActivity widgets stay on the legacy
+// mock-store pattern in this plan — those swap in plan 02-10 (Block G).
 
 import type { Metadata } from "next";
 
-import { getSession as getMockSession } from "@/lib/auth/dal";
+import { requireSession } from "@/lib/auth/dal";
+import { getEventsPage } from "@/lib/data/events.server";
 import { PageHeader } from "@/components/ui/page-header";
 import { KpiCards } from "@/components/feature/dashboard/KpiCards";
 import { ActiveEventsWidget } from "@/components/feature/dashboard/ActiveEventsWidget";
@@ -23,8 +25,17 @@ import { RecentActivityFeed } from "@/components/feature/dashboard/RecentActivit
 export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function DashboardPage() {
-  const session = await getMockSession();
-  const greeting = session?.displayName.split(" ")[0] ?? "there";
+  const session = await requireSession();
+  const greeting = session.displayName.split(" ")[0] ?? "there";
+
+  // SSR-seed active events (the widget filters to "active" via the live
+  // hook query; we seed the same slice). EVT-08 enforced in getEventsPage.
+  // Cap at 10 — the widget shows a compact list.
+  const { events: activeSeed } = await getEventsPage({
+    filters: { status: "active" },
+    limit: 10,
+    session,
+  });
 
   return (
     <div className="space-y-6">
@@ -34,9 +45,9 @@ export default async function DashboardPage() {
       />
       <KpiCards />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ActiveEventsWidget />
+        <ActiveEventsWidget initial={activeSeed} session={session} />
         <LowStockWidget />
-        <OverdueReturnsWidget />
+        <OverdueReturnsWidget initial={activeSeed} session={session} />
         <RecentActivityFeed />
       </div>
     </div>

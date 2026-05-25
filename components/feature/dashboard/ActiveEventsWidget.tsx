@@ -1,12 +1,18 @@
-// Phase 1 dashboard — Active events widget.
+// Phase 2 dashboard — Active events widget (Block D UI swap, plan 02-07).
 //
-// Reads `selectActiveEvents` from the mock store via useSyncExternalStore.
-// Seed data (Plan 02) contains 2 active events: "Spring Product Demo" and
-// "Marketing Pop-Up Booth" (the latter is also overdue per EVT-07 and surfaces
-// in the OverdueReturnsWidget separately).
+// REQUIREMENTS:
+//   - EVT-08 — staff sees only events where uid ∈ allowedStaff (enforced
+//     server-side in the SSR seed via getEventsPage + client-side in the
+//     onSnapshot listener via useEventsLive's array-contains filter).
 //
-// Each row links to /events/[id] (Plan 07's detail page) and shows a
-// StatusBadge using the central statusToTone mapping (Plan 03).
+// Reads active events via useEventsLive scoped to {status: "active"} so
+// new event creations / cancellations re-render live. SSR-seeded by the
+// dashboard page (app/(app)/page.tsx) to avoid the empty-then-fill flash
+// on first paint.
+//
+// Note: the full dashboard swap (KPI count() aggregations + RecentActivity
+// feed via useTransactionsLive) is plan 02-10 (Block G). This plan ships
+// the events portion only.
 
 "use client";
 
@@ -17,11 +23,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/feature/status/StatusBadge";
 import { statusToTone, statusToLabel } from "@/components/feature/status/status-to-tone";
-import { useMockStore } from "@/lib/hooks/use-mock-store";
-import { selectActiveEvents } from "@/lib/mock/selectors";
+import { useEventsLive } from "@/lib/hooks/use-events-live";
+import type { EventDoc } from "@/lib/types/event";
+import type { Session } from "@/lib/types/session";
 
-export function ActiveEventsWidget() {
-  const events = useMockStore(selectActiveEvents);
+export function ActiveEventsWidget({
+  initial,
+  session,
+}: {
+  initial: EventDoc[];
+  session: Session;
+}) {
+  const events = useEventsLive(initial, {
+    session,
+    status: "active",
+    limit: 10,
+  });
+
   return (
     <Card>
       <CardHeader className="pb-3">
