@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "spike:verify-session": "tsx --env-file=.env.local .planning/spikes/next-firebase-auth-edge-v1.12/verify-session.spike.ts"
+    "spike:verify-session": "tsx --env-file=.env.local .planning/spikes/next-firebase-auth-edge-v1.12/verify-session.spike.ts",
+    "seed:first-admin": "tsx --env-file=.env.local scripts/seed-first-admin.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

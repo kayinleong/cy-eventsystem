@@ -44,8 +44,14 @@ export function SetPasswordForm() {
   const searchParams = useSearchParams();
   const oobCode = searchParams?.get("oobCode") ?? null;
 
-  const [codeError, setCodeError] = useState<string | null>(null);
-  const [verifyingCode, setVerifyingCode] = useState(true);
+  // Derive the initial state from the URL param so we don't set state
+  // synchronously inside the effect (react-hooks/set-state-in-effect rule).
+  // - oobCode missing → codeError immediately, no need to verify
+  // - oobCode present → verifyingCode=true until the async check resolves
+  const [codeError, setCodeError] = useState<string | null>(() =>
+    oobCode ? null : "This link is invalid. Request a new one.",
+  );
+  const [verifyingCode, setVerifyingCode] = useState<boolean>(() => !!oobCode);
 
   const {
     register,
@@ -59,21 +65,27 @@ export function SetPasswordForm() {
   });
 
   // Verify the oobCode on mount so we can show "expired link" copy if
-  // the user followed an invalid/used reset link.
+  // the user followed an invalid/used reset link. Side effects only — all
+  // setState calls happen after async resolution (compliant with
+  // react-hooks/set-state-in-effect per D-01-02-A).
   useEffect(() => {
-    if (!oobCode) {
-      setCodeError("This link is invalid. Request a new one.");
-      setVerifyingCode(false);
-      return;
-    }
+    if (!oobCode) return;
+    let cancelled = false;
     verifyPasswordResetCode(auth, oobCode)
       .then(() => {
+        if (cancelled) return;
         setVerifyingCode(false);
       })
       .catch(() => {
-        setCodeError("This link has expired or has already been used. Request a new one.");
+        if (cancelled) return;
+        setCodeError(
+          "This link has expired or has already been used. Request a new one.",
+        );
         setVerifyingCode(false);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [oobCode]);
 
   async function onSubmit(values: SetPasswordInput) {
