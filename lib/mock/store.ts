@@ -24,6 +24,7 @@ import type { EventDoc, EventStatus } from "@/lib/types/event";
 import type { UserDoc, UserRole } from "@/lib/types/user";
 import type { TransactionDoc } from "@/lib/types/transaction";
 import type { MissingItemDoc, MissingReason } from "@/lib/types/missing-item";
+import { computeIsLowStock } from "@/lib/schemas/item";
 
 import { seedItems } from "./items";
 import { seedEvents } from "./events";
@@ -359,6 +360,11 @@ export function createItem(
     lifecycleState: "available",
     lowStockThreshold: input.lowStockThreshold,
     lowStockOrderedAt: null,
+    // RESEARCH P11: derived field; matches Phase 2 contract.
+    isLowStock: computeIsLowStock({
+      availableQty: input.totalQty,
+      lowStockThreshold: input.lowStockThreshold,
+    }),
     createdAt: now,
     updatedAt: now,
     createdBy: actor.uid,

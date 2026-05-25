@@ -16,8 +16,14 @@
 // RP-04 lowStockOrderedAt timestamp.
 
 import type { InventoryItem } from "@/lib/types/item";
+import { computeIsLowStock } from "@/lib/schemas/item";
 
-export const seedItems: InventoryItem[] = [
+// Raw seed list — `isLowStock` is derived once below from
+// `lowStockThreshold > 0 && availableQty <= lowStockThreshold` so the
+// Phase 1 InventoryItem shape matches the Phase 2 contract (RESEARCH P11).
+// Keeping the boolean derived (rather than hand-coding it on every row)
+// guarantees the seed never drifts from the helper.
+const rawSeedItems: Omit<InventoryItem, "isLowStock">[] = [
   // ============================================================
   // AUDIO (8 items) — SKU prefix AUD-
   // ============================================================
@@ -634,3 +640,11 @@ export const seedItems: InventoryItem[] = [
     updatedBy: "u-admin-1",
   },
 ];
+
+export const seedItems: InventoryItem[] = rawSeedItems.map((i) => ({
+  ...i,
+  isLowStock: computeIsLowStock({
+    availableQty: i.availableQty,
+    lowStockThreshold: i.lowStockThreshold,
+  }),
+}));

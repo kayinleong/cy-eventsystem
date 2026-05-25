@@ -31,6 +31,14 @@ export type InventoryItem = {
   lowStockThreshold: number;
   // REQUIREMENTS.md RP-04 — null means "not ordered"; ISO timestamp when marked ordered.
   lowStockOrderedAt: string | null;
+  /**
+   * Derived field — true iff `lowStockThreshold > 0 && availableQty <= lowStockThreshold`.
+   * Maintained by every Server Action that touches availableQty or lowStockThreshold
+   * (createItem, updateItem, adjustItemStock, retireItem, updateLowStockThreshold,
+   * checkoutItem, checkinItem). Required because Firestore where() cannot compare
+   * two fields (RESEARCH §7.2 / P11). Indexed via firestore.indexes.json.
+   */
+  isLowStock: boolean;
   // ISO strings in Phase 1 (CONTEXT.md D-04 fixed 2026 dates).
   createdAt: string;
   updatedAt: string;
