@@ -1,0 +1,41 @@
+{
+  "results": [
+    {
+      "num": 1,
+      "name": "Cookie creation round-trip",
+      "status": "PASS",
+      "notes": "Set-Cookie with __session, HttpOnly, Path=/; cookie len=1815"
+    },
+    {
+      "num": 2,
+      "name": "proxy allows authenticated requests",
+      "status": "PASS",
+      "notes": "GET /login with cookie → status=307, location=/, redirects-to-home=true (proxy's handleValidToken triggered redirectToHome)"
+    },
+    {
+      "num": 3,
+      "name": "proxy blocks anonymous requests",
+      "status": "PASS",
+      "notes": "GET /inventory no-cookie → status=307, location=/login?redirect=%2Finventory"
+    },
+    {
+      "num": 4,
+      "name": "verifySession returns decoded claims",
+      "status": "PASS",
+      "notes": "uidMatch=true, emailMatch=true, claim-keys=[aud,auth_time,email,email_verified,exp,firebase,iat,iss,source_sign_in_provider,sub,uid,user_id], role-claim=(missing — expected; set in 02-04)"
+    },
+    {
+      "num": 5,
+      "name": "signOut revokes + clears",
+      "status": "PASS",
+      "notes": "POST /api/auth/logout → status=200, clear-cookie=__session=<REDACTED-0chars>; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax"
+    },
+    {
+      "num": 6,
+      "name": "Revocation gate (AUTH-09)",
+      "status": "PASS",
+      "notes": "pre-revoke-works=true, post-revoke-rejected=true, error=auth/user-disabled"
+    }
+  ],
+  "nodeVersion": "v24.14.1"
+}

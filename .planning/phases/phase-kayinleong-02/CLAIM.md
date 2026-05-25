@@ -27,7 +27,21 @@
 
 ## What has changed
 
-(Populated as Phase 2 plans complete.)
+### Plan 02-01 (spike on next-firebase-auth-edge v1.12) — complete (2026-05-25)
+
+- Spike workspace scaffolded at `.planning/spikes/next-firebase-auth-edge-v1.12/`
+- Programmatic spike runner (`run-spike.ts`) implementing all 6 acceptance checks
+- All 6 acceptance criteria PASS — verdict: **PROCEED_AS_PLANNED**
+- Verdict + anomalies documented (see commit message + spike-results.json + handoff notes)
+- Key correction discovered: `admin.auth().verifySessionCookie()` does NOT work on auth-edge
+  cookies (HMAC envelope format, not Firebase native). Plan 02-02 DAL must use
+  `getTokensFromObject()` / `getTokens()` from the library instead.
+- Anomaly: `.env.local` FIREBASE_* trio mismatched `sa.json`. Spike used sa.json via
+  `applicationDefault()`. Developer must reconcile before 02-02.
+- Throwaway repo-root files cleaned up (proxy.ts + app/api/auth/* stubs deleted before
+  commit).
+- Dependencies committed: `firebase@^12.13`, `firebase-admin@^13.10`, `next-firebase-auth-edge@^1.12.0`, `tsx@^4.22.3` (dev).
+- `.gitignore` updated to exclude service-account JSON variants.
 
 ## Verification
 
