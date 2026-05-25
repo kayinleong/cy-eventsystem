@@ -1,21 +1,23 @@
-// Phase 1 — Disable user destructive button.
+// Phase 2 — Disable user destructive button.
 //
 // REQUIREMENTS:
 //   - AUTH-09 — admins can disable a user; disabled users lose access and
 //     show a "Disabled" badge in the users list (rendered by UsersTable).
+//     The disableUser Server Action revokes refresh tokens so existing
+//     sessions die on next request; the DAL re-checks Firestore.disabled
+//     on every authenticated request.
 //   - UI-SPEC Q9 — destructive confirmation uses <AlertDialog/> (NOT <Dialog/>).
 //     Title: "Disable this user?". Body: "They lose access immediately. Their
 //     past activity stays in reports." Confirm label: "Disable user" (verb-noun,
 //     never "OK").
 //
-// Per D-01-05-E actor-resolution pattern: useCurrentUser() gives the role/uid;
-// resolve the full UserDoc from seedUsers at submit time; pass to mutator.
-//
-// Renders nothing when the user is already disabled — the table cell collapses
-// cleanly without a tombstoned button.
+// Phase 1 used the mock store + a client-side actor lookup. Phase 2 calls
+// the disableUser Server Action which derives the actor server-side via
+// requireAdmin() — no client-side lookup, no actor arg.
 
 "use client";
 
+import { useTransition } from "react";
 import { Ban } from "lucide-react";
 import { toast } from "sonner";
 
@@ -31,9 +33,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { disableUser } from "@/lib/mock/store";
-import { seedUsers } from "@/lib/mock/users";
-import { useCurrentUser } from "@/lib/hooks/use-current-user";
+import { disableUser } from "@/app/(app)/users/actions";
 
 export function DisableUserButton({
   uid,
@@ -44,25 +44,24 @@ export function DisableUserButton({
   displayName: string;
   alreadyDisabled: boolean;
 }) {
-  const session = useCurrentUser();
+  const [pending, startTransition] = useTransition();
   if (alreadyDisabled) return null;
 
   function confirm() {
-    const actor = session
-      ? seedUsers.find((u) => u.uid === session.uid)
-      : undefined;
-    if (!actor) {
-      toast.error("Couldn't disable user");
-      return;
-    }
-    disableUser(uid, actor);
-    toast(`${displayName} disabled`);
+    startTransition(async () => {
+      const res = await disableUser(uid, true);
+      if (!res.ok) {
+        toast.error(res.error ?? "Couldn't disable user");
+        return;
+      }
+      toast(`${displayName} disabled`);
+    });
   }
 
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button variant="destructive" size="sm">
+        <Button variant="destructive" size="sm" disabled={pending}>
           <Ban className="mr-2 size-4" />
           Disable
         </Button>

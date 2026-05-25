@@ -1,28 +1,21 @@
-// Phase 1 — /users/invite full-page invite form.
+// Phase 2 — /users/invite full-page invite form.
 //
 // REQUIREMENTS:
 //   - AUTH-07 — admin invites a new user via email + display name + role.
 //     This is the dedicated /users/invite route (parallel entry to the
-//     InviteUserSheet on /users). Both call store.inviteUser with the same
-//     payload + actor-resolution pattern; only the chrome differs (Sheet vs
-//     full page card).
-//
-// UI-SPEC "Layout & Route Patterns" calls out `/users/new` (invite) as a
-// "Full-page route" alongside `/inventory/new` and `/events/new`. The Sheet
-// in /users is the in-context shortcut; this route is the form-bookmarkable
-// URL for AUTH-07 deep-linking.
+//     InviteUserSheet on /users). Both call inviteUser() Server Action;
+//     only the chrome differs (Sheet vs full page card).
+//   - CONTEXT.md D-09 — show password-reset link with Copy button after
+//     successful invite (both on success and partial-failure paths) so
+//     admin can share the link directly if email delivery is shaky.
 //
 // Form composition uses shadcn v4 <Field> primitives + rhf register/Controller
-// per D-01-04-B / D-01-06-A / D-01-07-A / D-01-11-B — the legacy <Form> /
-// <FormField> Context wrapper does NOT exist in the v4 radix-nova registry,
-// so we never import from `@/components/ui/form`.
-//
-// Actor-resolution pattern from Plan 05 D-01-05-E: read useCurrentUser() for
-// the role/uid, resolve the full UserDoc from seedUsers at submit time, call
-// store.inviteUser with the resolved actor.
+// per Phase 1 D-01-04-B. Phase 2 replaces the mock-store inviteUser call with
+// the Server Action; on success, swap the form chrome for a "Copy link" panel.
 
 "use client";
 
+import { useState, useTransition } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
@@ -47,18 +40,19 @@ import {
   InviteUserSchema,
   type InviteUserInput,
 } from "@/lib/schemas/user";
-import { inviteUser } from "@/lib/mock/store";
-import { seedUsers } from "@/lib/mock/users";
-import { useCurrentUser } from "@/lib/hooks/use-current-user";
+import { inviteUser } from "@/app/(app)/users/actions";
 
 export function InviteUserPageForm() {
   const router = useRouter();
-  const session = useCurrentUser();
+  const [pending, startTransition] = useTransition();
+  const [resetLink, setResetLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const {
     register,
     handleSubmit,
     control,
+    reset,
     formState: { errors },
   } = useForm<InviteUserInput>({
     resolver: zodResolver(InviteUserSchema),
@@ -67,17 +61,67 @@ export function InviteUserPageForm() {
   });
 
   function onSubmit(values: InviteUserInput) {
-    const actor = session
-      ? seedUsers.find((u) => u.uid === session.uid)
-      : undefined;
-    if (!actor) {
-      toast.error("Couldn't invite user");
-      return;
-    }
-    inviteUser(values, actor);
-    toast.success("User invited");
-    router.push("/users");
-    router.refresh();
+    const formData = new FormData();
+    formData.set("email", values.email);
+    formData.set("displayName", values.displayName);
+    formData.set("role", values.role);
+
+    startTransition(async () => {
+      const result = await inviteUser(formData);
+      if (!result.ok) {
+        toast.error(result.error ?? "Couldn't invite — try again.");
+        return;
+      }
+      setResetLink(result.resetLink);
+      toast.success("Invite created. Copy the link to share manually if email doesn't arrive.");
+    });
+  }
+
+  if (resetLink) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h3 className="font-semibold">Invite created</h3>
+          <p className="text-sm text-muted-foreground">
+            Firebase will email this link automatically. If the recipient
+            doesn&apos;t receive it, copy and share it directly.
+          </p>
+        </div>
+        <code className="block rounded-md bg-muted p-3 text-xs break-all">
+          {resetLink}
+        </code>
+        <div className="flex flex-col gap-2">
+          <Button
+            onClick={async () => {
+              await navigator.clipboard.writeText(resetLink);
+              setCopied(true);
+              toast.success("Copied");
+              setTimeout(() => setCopied(false), 2000);
+            }}
+            className="w-full"
+          >
+            {copied ? "Copied!" : "Copy link"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setResetLink(null);
+              reset({ email: "", displayName: "", role: "staff" });
+            }}
+            className="w-full"
+          >
+            Invite another
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => router.push("/users")}
+            className="w-full"
+          >
+            Back to users
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -152,10 +196,13 @@ export function InviteUserPageForm() {
           type="button"
           variant="outline"
           onClick={() => router.back()}
+          disabled={pending}
         >
           Cancel
         </Button>
-        <Button type="submit">Send invite</Button>
+        <Button type="submit" disabled={pending}>
+          {pending ? "Sending…" : "Send invite"}
+        </Button>
       </div>
     </form>
   );

@@ -1,23 +1,19 @@
-// Phase 1 — Inline role selector for /users table rows.
+// Phase 2 — Inline role selector for /users table rows.
 //
 // REQUIREMENTS:
 //   - AUTH-08 — admins can change another user's role from staff to admin or
-//     vice versa. The mutator (store.setUserRole) recomputes allowedStaff on
-//     every event because admin promotion changes the admin-union baked into
-//     each event's allowedStaff (Plan 02).
+//     vice versa. Cloud Function 1 (plan 02-04) mirrors users/{uid}.role to
+//     Auth custom claims + revokes refresh tokens on change. Cloud Function 2
+//     (onUserRoleChange) recomputes allowedStaff across all events when admin
+//     status flips.
 //
-// Per D-01-05-E actor-resolution pattern: useCurrentUser() gives the role/uid;
-// resolve the full UserDoc from seedUsers at submit time; pass to mutator.
-//
-// Admin-only at the UI level (UsersTable's parent route also gates via
-// requireAdmin()). The Select is intentionally NOT guarded at the component
-// level — UsersTable renders this inline for every row, including the actor's
-// own row. Self-protection (last-admin cannot demote self) lives upstream in
-// the mutator if/when REQUIREMENTS extends to it; Plan 1 mock accepts any
-// role change.
+// Phase 1 used the mock store + a client-side actor lookup. Phase 2 calls
+// the setUserRole Server Action which derives the actor server-side via
+// requireAdmin() — no client-side lookup, no actor arg.
 
 "use client";
 
+import { useTransition } from "react";
 import { toast } from "sonner";
 
 import {
@@ -27,9 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { setUserRole } from "@/lib/mock/store";
-import { seedUsers } from "@/lib/mock/users";
-import { useCurrentUser } from "@/lib/hooks/use-current-user";
+import { setUserRole } from "@/app/(app)/users/actions";
 import type { UserRole } from "@/lib/types/user";
 
 export function UserRoleSelectInline({
@@ -41,26 +35,25 @@ export function UserRoleSelectInline({
   currentRole: UserRole;
   disabled?: boolean;
 }) {
-  const session = useCurrentUser();
+  const [pending, startTransition] = useTransition();
 
   function change(role: UserRole) {
     if (role === currentRole) return;
-    const actor = session
-      ? seedUsers.find((u) => u.uid === session.uid)
-      : undefined;
-    if (!actor) {
-      toast.error("Couldn't change role");
-      return;
-    }
-    setUserRole(uid, role, actor);
-    toast.success(`Role updated to ${role}`);
+    startTransition(async () => {
+      const res = await setUserRole(uid, role);
+      if (!res.ok) {
+        toast.error(res.error ?? "Couldn't change role");
+        return;
+      }
+      toast.success(`Role updated to ${role}`);
+    });
   }
 
   return (
     <Select
       value={currentRole}
       onValueChange={(v) => change(v as UserRole)}
-      disabled={disabled}
+      disabled={disabled || pending}
     >
       <SelectTrigger className="w-28 h-8">
         <SelectValue />

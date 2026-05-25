@@ -19,7 +19,7 @@ import { ChevronLeft } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { requireAdmin } from "@/lib/auth/mock-session";
+import { requireAdmin } from "@/lib/auth/dal";
 import { InviteUserPageForm } from "./_components/invite-user-page-form";
 
 export const metadata: Metadata = { title: "Invite user" };

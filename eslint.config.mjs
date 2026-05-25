@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // functions/ is a separate npm package with its own tsconfig + CommonJS
+    // build output. Don't lint the compiled artifact or its node_modules from
+    // the root project; the source files in functions/src/ are linted on their
+    // own terms if functions/ adds its own ESLint config.
+    "functions/lib/**",
+    "functions/node_modules/**",
   ]),
 ]);
 
