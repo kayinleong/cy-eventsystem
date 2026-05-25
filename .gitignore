@@ -24,6 +24,12 @@
 .DS_Store
 *.pem
 
+# firebase service account credentials — NEVER commit
+sa.json
+firebase-adminsdk-*.json
+*-credentials.json
+*-service-account.json
+
 # debug
 npm-debug.log*
 yarn-debug.log*

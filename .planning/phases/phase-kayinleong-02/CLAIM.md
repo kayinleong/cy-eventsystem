@@ -4,8 +4,9 @@
 - session: claude-code
 - branch: main
 - started: 2026-05-25
-- status: claimed
+- status: in-progress
 - summary: Functionality — wire Firebase Auth + Firestore + 2 Cloud Functions + Storage; replace every mock with real backend; UI surface frozen from Phase 1
+- current plan: 02-01 (spike on next-firebase-auth-edge v1.12 — D-01 gate)
 
 ## What will change
 
