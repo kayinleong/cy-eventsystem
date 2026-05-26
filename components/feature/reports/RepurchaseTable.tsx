@@ -1,109 +1,116 @@
-// Phase 1 — /reports/repurchase client table.
+// Phase 2 — /reports/repurchase client table (Block G UI swap, plan 02-10).
 //
 // REQUIREMENTS:
-//   - REP-05 — items below threshold plus items frequently flagged missing/damaged.
-//   - RP-04 — admin can mark a low-stock item as "ordered" (inline button).
-//   - REP-06 — sort/page/filter state is URL-synced (via DataTable wrapper).
-//   - REP-07 — 50 rows per page (DataTable default).
+//   - REP-05 — items below threshold (low-stock primary signal).
+//   - RP-04 — admin "Mark as ordered" inline action calls markLowStockOrdered
+//     Server Action (from app/(app)/inventory/actions.ts).
+//   - REP-06 — sort/page/filter state is URL-synced.
+//   - REP-07 — cursor window = 50 rows.
 //
-// Surfaces two repurchase signals:
-//   - low-stock — availableQty <= threshold AND not already marked ordered
-//   - frequently-missing — ≥2 open missing records OR ≥2 damaged units
+// Phase 2 swap from Phase 1:
+//   - useMockStore + selectLowStockItems → useInventoryLive scoped to
+//     {isLowStock: true, limit: 50} (D-20 listener window).
+//   - markLowStockOrdered (mock mutator) → markLowStockOrdered Server Action;
+//     useTransition for pending state. seedUsers.find() actor lookup removed
+//     — Server Action derives actor via requireAdmin().
+//   - Marked-as-ordered items are excluded client-side (lowStockOrderedAt !==
+//     null) so the list shrinks the moment the action commits.
 //
-// Actor-resolution pattern from Plan 05 D-01-05-E: read useCurrentUser() for
-// the role/uid, resolve the full UserDoc from seedUsers at click time, call
-// the store mutator with the resolved actor.
-//
-// D-11 sortable-columns rule (Plan 03 Task 2): sortable columns in this table
-// are `name`. Non-sortable columns (`sku`, `available`, `threshold`, `missing`,
-// `damaged`, `reason`, `actions`) render plain string headers — NO
-// toggleSorting button, NO ArrowUpDown icon. Each non-sortable column carries
-// a `// D-11: <col> is NOT sortable` audit comment.
+// D-11 sortable-columns rule: sortable = name. Non-sortable: sku, available,
+// threshold, missing, damaged, actions.
 
 "use client";
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowUpDown } from "lucide-react";
-import type { ColumnDef } from "@tanstack/react-table";
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
+import {
+  flexRender,
+  getCoreRowModel,
+  getSortedRowModel,
+  useReactTable,
+  type ColumnDef,
+  type SortingState,
+} from "@tanstack/react-table";
+import {
+  AlertTriangle,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { toast } from "sonner";
 
-import { useMockStore } from "@/lib/hooks/use-mock-store";
-import { markLowStockOrdered } from "@/lib/mock/store";
-import { seedUsers } from "@/lib/mock/users";
+import { useInventoryLive } from "@/lib/hooks/use-inventory-live";
+import { useUrlTableState } from "@/lib/hooks/use-url-table-state";
 import { useCurrentUser } from "@/lib/hooks/use-current-user";
+import { markLowStockOrdered } from "@/app/(app)/inventory/actions";
 import type { InventoryItem } from "@/lib/types/item";
-import { DataTable } from "@/components/feature/table/DataTable";
-import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { StatusBadge } from "@/components/feature/status/StatusBadge";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 
-type RepurchaseReason = "low-stock" | "frequently-missing";
-
-type Row = {
-  item: InventoryItem;
-  missingCount: number;
-  damagedCount: number;
-  reason: RepurchaseReason;
-};
-
-export function RepurchaseTable() {
-  const items = useMockStore((s) => s.items);
-  const missing = useMockStore((s) => s.missingItems);
+export function RepurchaseTable({
+  initial,
+  nextCursor,
+}: {
+  initial: InventoryItem[];
+  nextCursor: string | null;
+}) {
+  const router = useRouter();
+  const itemsLive = useInventoryLive(initial, {
+    isLowStock: true,
+    limit: 50,
+  });
   const session = useCurrentUser();
+  const [pending, startTransition] = useTransition();
 
-  const rows: Row[] = useMemo(() => {
-    const result: Row[] = [];
-    for (const i of items) {
-      if (i.lifecycleState === "retired") continue;
-      // Low-stock — primary repurchase signal.
-      const isLowStock =
-        i.lowStockThreshold > 0 &&
-        i.availableQty <= i.lowStockThreshold &&
-        !i.lowStockOrderedAt;
-      if (isLowStock) {
-        result.push({
-          item: i,
-          missingCount: 0,
-          damagedCount: i.damagedQty,
-          reason: "low-stock",
-        });
-        continue;
+  const { state: url, setGlobalFilter, setCursor } = useUrlTableState();
+
+  // Hide items already marked as ordered (RP-04: lowStockOrderedAt set means
+  // a replenishment is in flight — keep them out of the actionable list).
+  const filtered = useMemo(() => {
+    return itemsLive.filter((i) => {
+      if (i.lowStockOrderedAt) return false;
+      if (url.q) {
+        const q = url.q.toLowerCase();
+        if (
+          !i.name.toLowerCase().includes(q) &&
+          !i.sku.toLowerCase().includes(q)
+        ) {
+          return false;
+        }
       }
-      // Frequently-missing — secondary repurchase signal (≥2 open missing or
-      // ≥2 damaged units suggests this SKU loses stock regularly).
-      const missingForItem = missing.filter(
-        (m) => m.itemId === i.id && m.status !== "found",
-      );
-      if (missingForItem.length >= 2 || i.damagedQty >= 2) {
-        result.push({
-          item: i,
-          missingCount: missingForItem.length,
-          damagedCount: i.damagedQty,
-          reason: "frequently-missing",
-        });
-      }
-    }
-    return result;
-  }, [items, missing]);
+      return true;
+    });
+  }, [itemsLive, url.q]);
 
   function markOrdered(itemId: string, name: string) {
-    const actor = session
-      ? seedUsers.find((u) => u.uid === session.uid)
-      : undefined;
-    if (!actor) {
-      toast.error("Couldn't mark as ordered");
-      return;
-    }
-    markLowStockOrdered(itemId, actor);
-    toast.success(`${name} marked as ordered`);
+    startTransition(async () => {
+      const r = await markLowStockOrdered(itemId);
+      if (!r.ok) {
+        toast.error(r.error || "Couldn't mark as ordered");
+        return;
+      }
+      toast.success(`${name} marked as ordered`);
+    });
   }
 
-  const columns: ColumnDef<Row>[] = useMemo(
+  const isAdmin = session?.role === "admin";
+
+  const columns: ColumnDef<InventoryItem>[] = useMemo(
     () => [
       {
-        id: "name",
+        accessorKey: "name",
         header: ({ column }) => (
           <Button
             variant="ghost"
@@ -113,78 +120,59 @@ export function RepurchaseTable() {
             Item <ArrowUpDown className="ml-2 size-3" />
           </Button>
         ),
-        accessorFn: (r) => r.item.name,
         cell: ({ row }) => (
           <Link
-            href={`/inventory/${row.original.item.id}`}
+            href={`/inventory/${row.original.id}`}
             className="font-medium hover:underline"
           >
-            {row.original.item.name}
+            {row.original.name}
           </Link>
         ),
       },
       {
-        id: "sku",
+        accessorKey: "sku",
         // D-11: sku is NOT sortable.
         header: "SKU",
-        accessorFn: (r) => r.item.sku,
         cell: ({ row }) => (
-          <span className="font-mono text-xs">{row.original.item.sku}</span>
+          <span className="font-mono text-xs">{row.original.sku}</span>
         ),
       },
       {
-        id: "available",
+        accessorKey: "availableQty",
         // D-11: available is NOT sortable.
         header: "Available",
-        accessorFn: (r) => r.item.availableQty,
       },
       {
-        id: "threshold",
+        accessorKey: "lowStockThreshold",
         // D-11: threshold is NOT sortable.
         header: "Threshold",
-        accessorFn: (r) => r.item.lowStockThreshold,
         cell: ({ row }) =>
-          row.original.item.lowStockThreshold > 0
-            ? row.original.item.lowStockThreshold
+          row.original.lowStockThreshold > 0
+            ? row.original.lowStockThreshold
             : "—",
       },
       {
-        id: "missing",
-        // D-11: missing is NOT sortable.
-        header: "Missing",
-        accessorFn: (r) => r.missingCount,
-      },
-      {
-        id: "damaged",
+        accessorKey: "damagedQty",
         // D-11: damaged is NOT sortable.
         header: "Damaged",
-        accessorFn: (r) => r.damagedCount,
       },
       {
         id: "reason",
         // D-11: reason is NOT sortable.
         header: "Reason",
-        cell: ({ row }) =>
-          row.original.reason === "low-stock" ? (
-            <StatusBadge tone="amber">Low stock</StatusBadge>
-          ) : (
-            <Badge variant="outline" className="text-xs">
-              Frequent loss
-            </Badge>
-          ),
+        cell: () => <StatusBadge tone="amber">Low stock</StatusBadge>,
       },
       {
         id: "actions",
         // D-11: actions is NOT sortable.
         header: "",
         cell: ({ row }) =>
-          session?.role === "admin" && row.original.reason === "low-stock" ? (
+          isAdmin ? (
             <Button
               variant="outline"
               size="sm"
-              onClick={() =>
-                markOrdered(row.original.item.id, row.original.item.name)
-              }
+              disabled={pending}
+              onClick={() => markOrdered(row.original.id, row.original.name)}
             >
               Mark as ordered
             </Button>
@@ -192,21 +180,127 @@ export function RepurchaseTable() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [session],
+    [isAdmin, pending],
   );
 
+  const sorting: SortingState = useMemo(() => {
+    if (!url.sort) return [];
+    const [id, dir] = url.sort.split(":");
+    return id ? [{ id, desc: dir === "desc" }] : [];
+  }, [url.sort]);
+
+  const table = useReactTable({
+    data: filtered,
+    columns,
+    manualPagination: true,
+    pageCount: -1,
+    state: { sorting, pagination: { pageIndex: 0, pageSize: 50 } },
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
+  const rows = table.getRowModel().rows;
+  const isEmpty = itemsLive.length === 0;
+
+  function goPrev() {
+    router.back();
+  }
+  function goNext() {
+    if (nextCursor) setCursor(nextCursor);
+  }
+
   return (
-    <DataTable<Row>
-      columns={columns}
-      data={rows}
-      globalFilterPlaceholder="Search items…"
-      emptyState={
-        <EmptyState
-          icon={AlertTriangle}
-          heading="Nothing to repurchase"
-          body="No items currently meet repurchase criteria."
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <Input
+          placeholder="Search items…"
+          value={url.q}
+          onChange={(e) => setGlobalFilter(e.target.value)}
+          className="max-w-xs"
         />
-      }
-    />
+      </div>
+
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            {table.getHeaderGroups().map((group) => (
+              <TableRow key={group.id}>
+                {group.headers.map((header) => (
+                  <TableHead key={header.id}>
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )}
+                  </TableHead>
+                ))}
+              </TableRow>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {isEmpty ? (
+              <TableRow>
+                <TableCell colSpan={columns.length} className="p-0">
+                  <EmptyState
+                    icon={AlertTriangle}
+                    heading="Nothing to repurchase"
+                    body="No items currently below threshold."
+                  />
+                </TableCell>
+              </TableRow>
+            ) : rows.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center text-muted-foreground"
+                >
+                  No results.
+                </TableCell>
+              </TableRow>
+            ) : (
+              rows.map((row) => (
+                <TableRow key={row.id}>
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id}>
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="flex items-center justify-between pt-2">
+        <span className="text-sm text-muted-foreground">
+          Showing {filtered.length} {filtered.length === 1 ? "item" : "items"}
+        </span>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={goPrev}
+            disabled={!url.cursor}
+            aria-label="Previous page"
+          >
+            <ChevronLeft className="size-4" /> Prev
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={goNext}
+            disabled={!nextCursor}
+            aria-label="Next page"
+          >
+            Next <ChevronRight className="size-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }

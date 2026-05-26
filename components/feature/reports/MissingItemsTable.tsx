@@ -1,40 +1,61 @@
-// Phase 1 — /reports/missing client table.
+// Phase 2 — /reports/missing client table (Block G UI swap, plan 02-10).
 //
 // REQUIREMENTS:
-//   - MIS-02 / REP-03 — list open missing-item records with admin "Resolve"
-//     action; resolution dispatches store.resolveMissing.
+//   - MIS-02 / REP-03 — list missing-item records (default status=open)
+//     with admin "Resolve" action; resolution dispatches the resolveMissing
+//     Server Action (Plan 02-09).
 //   - REP-06 — every filter / sort / page state is URL-synced via
-//     useUrlTableState (3 keys: status, reason, eventId).
-//   - REP-07 — 50 rows per page (DataTable default).
+//     useUrlTableState (2 keys: status, eventId).
+//   - REP-07 — cursor window = 50 rows.
 //
-// Default status filter is `open` (the actionable view); user can switch to
-// `_all` or another status. The toolbar's status select treats the missing
-// `_all` value as a literal filter override; the URL stores no `status` param
-// when the user selects "Open" (the default) — matches EventsTable's pattern.
+// Phase 2 swap from Phase 1:
+//   - useMockStore → useMissingLive (Plan 02-09; D-20 50-row window).
+//   - SSR-seeded `initial` from getMissingPage; live takeover via onSnapshot.
+//   - Cursor pagination with Prev (router.back) / Next (?cursor=) chrome.
+//   - ResolveMissingSheet preserved — already calls resolveMissing Server
+//     Action from 02-09; no further changes needed.
 //
-// D-11 sortable-columns rule (Plan 03 Task 2): sortable columns in this table
-// are `reportedAt` (date axis). Non-sortable columns (`itemName`, `qty`,
-// `eventName`, `reason`, `status`, `reportedByName`, `actions`) render plain
-// string headers — NO toggleSorting button, NO ArrowUpDown icon. Each
-// non-sortable column carries a `// D-11: <col> is NOT sortable` audit comment.
+// D-11 sortable-columns rule preserved: sortable = reportedAt (date axis).
+// Non-sortable: itemName, qty, eventName, reason, status, reportedByName,
+// actions.
 
 "use client";
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { CheckCircle2, ArrowUpDown } from "lucide-react";
-import type { ColumnDef } from "@tanstack/react-table";
+import { useRouter } from "next/navigation";
+import {
+  flexRender,
+  getCoreRowModel,
+  getSortedRowModel,
+  useReactTable,
+  type ColumnDef,
+  type SortingState,
+} from "@tanstack/react-table";
+import {
+  ArrowUpDown,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 
-import { useMockStore } from "@/lib/hooks/use-mock-store";
+import { useMissingLive } from "@/lib/hooks/use-missing-live";
 import { useUrlTableState } from "@/lib/hooks/use-url-table-state";
 import type {
   MissingItemDoc,
-  MissingReason,
   MissingStatus,
 } from "@/lib/types/missing-item";
-import { DataTable } from "@/components/feature/table/DataTable";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { StatusBadge } from "@/components/feature/status/StatusBadge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -45,29 +66,35 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { ResolveMissingSheet } from "@/components/feature/missing/ResolveMissingSheet";
 
-const REASONS: MissingReason[] = [
-  "Lost",
-  "Damaged",
-  "Not returned",
-  "Unknown",
-];
 const STATUSES: MissingStatus[] = ["open", "found", "writtenOff"];
 
-export function MissingItemsTable() {
-  const records = useMockStore((s) => s.missingItems);
-  const events = useMockStore((s) => s.events);
-  const { state: url, setFilter } = useUrlTableState([
-    "status",
-    "reason",
-    "eventId",
-  ]);
+export function MissingItemsTable({
+  initial,
+  nextCursor,
+  initialStatus,
+}: {
+  initial: MissingItemDoc[];
+  nextCursor: string | null;
+  initialStatus: MissingStatus;
+}) {
+  const router = useRouter();
+  const { state: url, setGlobalFilter, setFilter, setCursor } = useUrlTableState(
+    ["status", "eventId"],
+  );
+
+  // The page's default is `open`; URL status overrides if present.
+  const status: MissingStatus =
+    (url.filters.status as MissingStatus | undefined) ?? initialStatus;
+
+  const records = useMissingLive(initial, {
+    status,
+    eventId: url.filters.eventId || undefined,
+    limit: 50,
+  });
 
   const filtered = useMemo(() => {
-    // Default status=open per REP-03 (the actionable view).
-    const statusFilter = url.filters.status ?? "open";
     return records.filter((m) => {
-      if (statusFilter !== "_all" && m.status !== statusFilter) return false;
-      if (url.filters.reason && m.reason !== url.filters.reason) return false;
+      if (m.status !== status) return false;
       if (url.filters.eventId && m.eventId !== url.filters.eventId)
         return false;
       if (url.q) {
@@ -82,7 +109,7 @@ export function MissingItemsTable() {
       }
       return true;
     });
-  }, [records, url.filters, url.q]);
+  }, [records, status, url.filters.eventId, url.q]);
 
   const columns: ColumnDef<MissingItemDoc>[] = useMemo(
     () => [
@@ -97,7 +124,8 @@ export function MissingItemsTable() {
             Reported <ArrowUpDown className="ml-2 size-3" />
           </Button>
         ),
-        cell: ({ row }) => new Date(row.original.reportedAt).toLocaleDateString(),
+        cell: ({ row }) =>
+          new Date(row.original.reportedAt).toLocaleDateString(),
         sortingFn: (a, b) =>
           a.original.reportedAt.localeCompare(b.original.reportedAt),
       },
@@ -173,79 +201,145 @@ export function MissingItemsTable() {
     [],
   );
 
+  const sorting: SortingState = useMemo(() => {
+    if (!url.sort) return [];
+    const [id, dir] = url.sort.split(":");
+    return id ? [{ id, desc: dir === "desc" }] : [];
+  }, [url.sort]);
+
+  const table = useReactTable({
+    data: filtered,
+    columns,
+    manualPagination: true,
+    pageCount: -1,
+    state: { sorting, pagination: { pageIndex: 0, pageSize: 50 } },
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
+  const rows = table.getRowModel().rows;
+  const isEmpty = records.length === 0;
+
+  function goPrev() {
+    router.back();
+  }
+  function goNext() {
+    if (nextCursor) setCursor(nextCursor);
+  }
+
   return (
-    <DataTable<MissingItemDoc>
-      columns={columns}
-      data={filtered}
-      filterKeys={["status", "reason", "eventId"]}
-      globalFilterPlaceholder="Search missing items…"
-      toolbarExtras={
-        <>
-          <Select
-            value={url.filters.status ?? "open"}
-            onValueChange={(v) =>
-              setFilter("status", v === "open" ? undefined : v)
-            }
-          >
-            <SelectTrigger className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="_all">All statuses</SelectItem>
-              {STATUSES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s === "writtenOff"
-                    ? "Written off"
-                    : s.charAt(0).toUpperCase() + s.slice(1)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={url.filters.reason ?? "_all"}
-            onValueChange={(v) =>
-              setFilter("reason", v === "_all" ? undefined : v)
-            }
-          >
-            <SelectTrigger className="w-36">
-              <SelectValue placeholder="All reasons" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="_all">All reasons</SelectItem>
-              {REASONS.map((r) => (
-                <SelectItem key={r} value={r}>
-                  {r}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={url.filters.eventId ?? "_all"}
-            onValueChange={(v) =>
-              setFilter("eventId", v === "_all" ? undefined : v)
-            }
-          >
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="All events" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="_all">All events</SelectItem>
-              {events.map((e) => (
-                <SelectItem key={e.id} value={e.id}>
-                  {e.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </>
-      }
-      emptyState={
-        <EmptyState
-          icon={CheckCircle2}
-          heading="Nothing missing"
-          body="All checked-out items are accounted for."
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <Input
+          placeholder="Search missing items…"
+          value={url.q}
+          onChange={(e) => setGlobalFilter(e.target.value)}
+          className="max-w-xs"
         />
-      }
-    />
+        <Select
+          value={status}
+          onValueChange={(v) =>
+            // "open" is the default — drop it from the URL when selected.
+            setFilter("status", v === "open" ? null : v)
+          }
+        >
+          <SelectTrigger className="w-36">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUSES.map((s) => (
+              <SelectItem key={s} value={s}>
+                {s === "writtenOff"
+                  ? "Written off"
+                  : s.charAt(0).toUpperCase() + s.slice(1)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            {table.getHeaderGroups().map((group) => (
+              <TableRow key={group.id}>
+                {group.headers.map((header) => (
+                  <TableHead key={header.id}>
+                    {header.isPlaceholder
+                      ? null
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )}
+                  </TableHead>
+                ))}
+              </TableRow>
+            ))}
+          </TableHeader>
+          <TableBody>
+            {isEmpty ? (
+              <TableRow>
+                <TableCell colSpan={columns.length} className="p-0">
+                  <EmptyState
+                    icon={CheckCircle2}
+                    heading="Nothing missing"
+                    body="All checked-out items are accounted for."
+                  />
+                </TableCell>
+              </TableRow>
+            ) : rows.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center text-muted-foreground"
+                >
+                  No results.
+                </TableCell>
+              </TableRow>
+            ) : (
+              rows.map((row) => (
+                <TableRow key={row.id}>
+                  {row.getVisibleCells().map((cell) => (
+                    <TableCell key={cell.id}>
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="flex items-center justify-between pt-2">
+        <span className="text-sm text-muted-foreground">
+          Showing {filtered.length}{" "}
+          {filtered.length === 1 ? "record" : "records"}
+        </span>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={goPrev}
+            disabled={!url.cursor}
+            aria-label="Previous page"
+          >
+            <ChevronLeft className="size-4" /> Prev
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={goNext}
+            disabled={!nextCursor}
+            aria-label="Next page"
+          >
+            Next <ChevronRight className="size-4" />
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -1,23 +1,43 @@
-// Phase 1 — /reports/missing route.
+// Phase 2 — /reports/missing route (Block G UI swap, plan 02-10).
 //
 // REQUIREMENTS:
 //   - REP-03 — show open missing-item records.
 //   - MIS-02 — admin resolve action surfaced inline per row.
-//   - REP-07 — 50 rows per page (DataTable default).
-//   - UI-SPEC — Export CSV button rendered but disabled (Phase 1 out-of-scope).
-//   - UI-SPEC empty-state copy table: "Nothing missing" / "All checked-out
-//     items are accounted for." (rendered inside MissingItemsTable).
+//   - REP-06 — every filter / sort / page state is URL-synced.
+//   - REP-07 — 50 rows per page (cursor window).
+//
+// Phase 2 swap: getMissingPage SSR seed → MissingItemsTable + useMissingLive.
 
 import type { Metadata } from "next";
 import { Download } from "lucide-react";
 
+import { requireSession } from "@/lib/auth/dal";
+import { getMissingPage } from "@/lib/data/missing.server";
+import type { MissingStatus } from "@/lib/types/missing-item";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { MissingItemsTable } from "@/components/feature/reports/MissingItemsTable";
 
 export const metadata: Metadata = { title: "Missing" };
 
-export default function MissingReportPage() {
+type RouteProps = {
+  searchParams: Promise<{
+    cursor?: string;
+    status?: MissingStatus;
+    eventId?: string;
+  }>;
+};
+
+export default async function MissingReportPage({ searchParams }: RouteProps) {
+  await requireSession();
+  const p = await searchParams;
+  // Default status filter = "open" per REP-03 (the actionable view).
+  const status: MissingStatus = p.status ?? "open";
+  const { missing, nextCursor } = await getMissingPage({
+    cursor: p.cursor ?? null,
+    filters: { status, eventId: p.eventId },
+    limit: 50,
+  });
   return (
     <div className="space-y-6">
       <PageHeader
@@ -30,7 +50,11 @@ export default function MissingReportPage() {
           </Button>
         }
       />
-      <MissingItemsTable />
+      <MissingItemsTable
+        initial={missing}
+        nextCursor={nextCursor}
+        initialStatus={status}
+      />
     </div>
   );
 }
