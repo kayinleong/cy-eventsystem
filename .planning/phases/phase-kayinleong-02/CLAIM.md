@@ -6,7 +6,7 @@
 - started: 2026-05-25
 - status: in-progress
 - summary: Functionality — wire Firebase Auth + Firestore + 2 Cloud Functions + Storage; replace every mock with real backend; UI surface frozen from Phase 1
-- current plan: 02-11 (Server Action audit + lib/mock wholesale wipe — Wave 11, Block H); 02-10 reports + Block G rules audit PASS; reports sub-nav fix (commit 319fa9c) + sidebar matchPrefix fix (d7dcda5); event status derived from dates; Cloud Functions removed and inlined into Server Actions per D-02 re-amendment
+- current plan: 02-11 COMPLETE (Server Action audit + lib/mock wholesale wipe — Wave 11, Block H); Phase 2 data plane closed — every Server Action audited PASS, mock layer deleted (~93 KB reclaimed). 02-10 reports + Block G rules audit PASS; reports sub-nav fix (commit 319fa9c) + sidebar matchPrefix fix (d7dcda5); event status derived from dates; Cloud Functions removed and inlined into Server Actions per D-02 re-amendment
 
 ## What will change
 
@@ -252,6 +252,23 @@ User-attested manual Firebase Console Rules Playground audit per D-06 mitigation
 - Architecture preserved: no `functions/` directory, no `middleware.ts`, no `verifySessionCookie`/`createSessionCookie`/`enableIndexedDbPersistence`; `firestore.rules` / `firestore.indexes.json` / `storage.rules` / `firebase.json` / `proxy.ts` / DAL / Firebase clients / Server Actions in inventory/users/events/checkout/checkin/missing UNTOUCHED. All new listeners gated on `onAuthStateChanged` (zero new raw `onSnapshot` — all consumers reuse the 4 existing live hooks).
 - See `.planning/phases/phase-kayinleong-02/02-10-reports-and-aggregations-SUMMARY.md`.
 - **Plan 02-10 gate:** awaiting end-to-end smoke (6 rows below) + Block G rules audit (4 cases) per SUMMARY.md.
+
+### Plan 02-11 (Server Action audit + lib/mock wholesale wipe — Wave 11, Block H) — complete (2026-05-26)
+
+- `.planning/phases/phase-kayinleong-02/audit-server-actions.md` (NEW): Server Action audit report covering all **15 Server Actions** across 6 `actions.ts` files (`users`, `inventory`, `events`, `checkout`, `checkin`, `reports/missing`). All 15 PASS every applicable check (`"use server"` line 1, `requireSession`/`requireAdmin` before Admin SDK, Zod parse, `runTransaction` for stock-changing logic, `revalidatePath` per RESEARCH §8.5, audit row for movements per AUD-01, discriminated return + error wrap). Per-cell PASS count: 106. No FAILs. Commit `7c02d98`.
+- One non-blocking improvement logged in audit findings: `adjustItemStock` could defensively add `/reports/repurchase` to its revalidate set (crosses-threshold can flip `isLowStock`). Out of scope for plan 02-11 (audit-only; would touch frozen Server Action surface).
+- revalidatePath matrix cross-referenced — all matrix paths covered; divergences (e.g., `cancelEvent` adds `/reports/stock`; `commitCheckinCartAction` adds `/events/[id]/checkin`) are defensible extras.
+- Pre-deletion grep confirmed zero live consumers across `app/`, `components/`, `lib/`. Only matches were internal cross-references between the doomed files themselves and a comment-only artifact (`components/feature/settings/LowStockThresholdsCard.tsx:15` mentioning deleted Phase 1 code — safe).
+- **10 files deleted** (~93 KB reclaimed) via `git rm`:
+  - `lib/auth/mock-session.ts` (re-export shim deferred from plan 02-03)
+  - `lib/mock/cookie.ts`, `store.ts`, `users.ts`, `items.ts`, `events.ts`, `transactions.ts`, `missing-items.ts`, `selectors.ts` (Phase 1 in-memory data layer)
+  - `lib/hooks/use-mock-store.ts` (Phase 1 client hook)
+  - `lib/mock/` directory removed entirely. Commit `db2b96b`.
+- **Project is now 100% Firebase-backed.** Zero references to mock layer anywhere in the source tree.
+- Verification gates green: `npx tsc --noEmit` PASS, `npm run lint` PASS (0 errors, 12 pre-existing TanStack `useReactTable` warnings unchanged), `npm run build` PASS (30 routes generated, "Compiled successfully in 4.2s").
+- Architecture preserved: no `functions/` directory recreated, no `middleware.ts`, no Server Action modifications during audit (audit-only per plan scope). `firestore.rules` / `firestore.indexes.json` / `storage.rules` / `firebase.json` / `proxy.ts` / DAL / Firebase clients / all `actions.ts` files UNTOUCHED.
+- See `.planning/phases/phase-kayinleong-02/02-11-server-action-and-revalidate-audit-SUMMARY.md` + `.planning/phases/phase-kayinleong-02/audit-server-actions.md`.
+- **Plan 02-11 gate:** none — the audit IS the deliverable and the mock wipe self-verifies via `npm run build` exit 0.
 
 ## E2E Smoke + Block G Rules Audit — Plan 02-10 (awaiting attestation)
 
