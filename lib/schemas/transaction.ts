@@ -21,7 +21,10 @@ export const CheckoutCartSchema = z.object({
 });
 
 // One returning item during check-in. REQUIREMENTS.md CI-04 requires a
-// missing-reason when returnedQty < checkedOutQty — enforced via .refine.
+// missing-reason when returnedQty + damagedQty < checkedOutQty — enforced
+// inside the Server Action (Plan 02-09 commitCheckinCartAction).
+// damagedQty is a SEPARATE bucket from returnedQty (CI-06) — damaged stock
+// flows into item.damagedQty, NOT availableQty.
 export const CheckinLineSchema = z
   .object({
     parentTxId: z.string().min(1),
@@ -41,5 +44,13 @@ export const CheckinLineSchema = z
     },
   );
 
+// Used by /events/[eventId]/checkin commitCheckinCartAction.
+// Plan 02-09 marquee transaction input.
+export const CheckinCartSchema = z.object({
+  eventId: z.string().min(1),
+  lines: z.array(CheckinLineSchema).min(1, "Check in at least one line."),
+});
+
 export type CheckoutCartInput = z.input<typeof CheckoutCartSchema>;
 export type CheckinLineInput = z.input<typeof CheckinLineSchema>;
+export type CheckinCartInput = z.input<typeof CheckinCartSchema>;
