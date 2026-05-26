@@ -1,20 +1,28 @@
-// Phase 1 dashboard — Low stock widget.
+// Phase 2 dashboard — Low stock widget (Block G UI swap, plan 02-10).
 //
-// REQUIREMENTS.md:
-//   - RP-02 / RP-01 — list items where lifecycleState != "retired" AND
-//     lowStockThreshold > 0 AND availableQty <= lowStockThreshold AND
-//     lowStockOrderedAt is null (selectLowStockItems centralizes the rule).
-//   - RP-04 — admin-only inline "Mark as ordered" button calls
-//     markLowStockOrdered, which sets lowStockOrderedAt = now and removes the
-//     item from the widget on the next render (the selector excludes
-//     already-ordered items).
+// REQUIREMENTS:
+//   - RP-02 / RP-01 — list items where isLowStock === true (the RESEARCH P11
+//     denormalized boolean maintained by every Server Action that touches
+//     availableQty or lowStockThreshold).
+//   - RP-04 — admin-only "Mark as ordered" calls markLowStockOrdered Server
+//     Action; on success revalidatePath bumps both /reports/repurchase and /.
 //
-// Staff role sees the list but no inline action — they can still report by
-// other means; the action is gated to admin per AUTH-10 / RP-04.
+// Phase 2 swap from Phase 1:
+//   - useMockStore + selectLowStockItems → useInventoryLive scoped to
+//     {isLowStock: true, limit: 50} (D-20 listener window).
+//   - markLowStockOrdered mock mutator → markLowStockOrdered Server Action
+//     from app/(app)/inventory/actions.ts; useTransition for pending state.
+//   - seedUsers.find() actor lookup removed — Server Action derives actor
+//     via requireAdmin().
+//
+// Note: the widget consumes a SSR-seeded `initialItems` prop so the first
+// paint matches what useInventoryLive will resolve once the auth-gated
+// onSnapshot subscription connects.
 
 "use client";
 
 import Link from "next/link";
+import { useTransition } from "react";
 import { AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -22,26 +30,28 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useCurrentUser } from "@/lib/hooks/use-current-user";
-import { useMockStore } from "@/lib/hooks/use-mock-store";
-import { selectLowStockItems } from "@/lib/mock/selectors";
-import { markLowStockOrdered } from "@/lib/mock/store";
-import { seedUsers } from "@/lib/mock/users";
+import { useInventoryLive } from "@/lib/hooks/use-inventory-live";
+import { markLowStockOrdered } from "@/app/(app)/inventory/actions";
+import type { InventoryItem } from "@/lib/types/item";
 
-export function LowStockWidget() {
-  const items = useMockStore(selectLowStockItems);
+export function LowStockWidget({
+  initialItems,
+}: {
+  initialItems: InventoryItem[];
+}) {
+  const items = useInventoryLive(initialItems, { isLowStock: true, limit: 50 });
   const session = useCurrentUser();
+  const [pending, startTransition] = useTransition();
 
   function markOrdered(itemId: string, name: string) {
-    // markLowStockOrdered takes the full UserDoc actor (Plan 02 mutator
-    // contract); look it up from seedUsers by the session uid. Phase 2 swaps
-    // this to a Server Action that derives the actor from verifyTokens().
-    const actor = session ? seedUsers.find((u) => u.uid === session.uid) : undefined;
-    if (!actor) {
-      toast.error("Couldn't mark as ordered");
-      return;
-    }
-    markLowStockOrdered(itemId, actor);
-    toast.success(`Marked ${name} as ordered`);
+    startTransition(async () => {
+      const r = await markLowStockOrdered(itemId);
+      if (!r.ok) {
+        toast.error(r.error || "Couldn't mark as ordered");
+        return;
+      }
+      toast.success(`Marked ${name} as ordered`);
+    });
   }
 
   return (
@@ -83,6 +93,7 @@ export function LowStockWidget() {
                   <Button
                     variant="outline"
                     size="xs"
+                    disabled={pending}
                     onClick={() => markOrdered(i.id, i.name)}
                   >
                     Mark as ordered

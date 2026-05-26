@@ -1,45 +1,51 @@
-// Phase 1 dashboard KPI cards — 4 hero metrics in a responsive 2/4-col grid.
+// Phase 2 dashboard KPI cards — 4 hero metrics from Firestore count() aggregations.
 //
-// REQUIREMENTS.md:
-//   - EVT-07 (active events count drives "Active events" card)
-//   - RP-02  (low-stock count drives "Low stock" card)
-//   - MIS-01 (open missing count drives "Open missing" card)
+// REQUIREMENTS:
+//   - EVT-07 — active events count drives "Active events" card.
+//   - RP-02  — low-stock count drives "Low stock" card.
+//   - REP-02 — items checked out drives "Items checked out" card.
 //
-// All counts subscribe to the mock store via useSyncExternalStore — any later
-// plan's mutation (checkout / checkin / resolveMissing / markLowStockOrdered)
-// causes this widget to re-render with fresh values.
+// Phase 2 swap from Phase 1:
+//   - Mock store subscription + array projection → SSR-passed counts (props)
+//     per CONTEXT D-21.
+//   - NOT real-time — counts refresh on every dashboard render
+//     (revalidatePath('/') after Server Actions keeps them current).
+//   - No `"use client"` directive — this is now a Server Component child
+//     rendered from `app/(app)/page.tsx`.
 //
-// CONTEXT.md D-01 — selectors live in lib/mock/selectors.ts so the same
-// projections work against a Firestore-backed snapshot in Phase 2.
+// D-21 commitment: NO full-collection JS aggregation. The 4 numbers
+// come from `getDashboardKpis()` (4 Firestore count() aggregations).
 
-"use client";
-
-import { Calendar, PackageOpen, AlertTriangle, AlertCircle, type LucideIcon } from "lucide-react";
+import {
+  Calendar,
+  PackageOpen,
+  AlertTriangle,
+  AlertCircle,
+  type LucideIcon,
+} from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useMockStore } from "@/lib/hooks/use-mock-store";
-import {
-  selectActiveEvents,
-  selectLowStockItems,
-  selectOpenMissing,
-} from "@/lib/mock/selectors";
 
-export function KpiCards() {
-  const activeEvents = useMockStore(selectActiveEvents);
-  const lowStock = useMockStore(selectLowStockItems);
-  const openMissing = useMockStore(selectOpenMissing);
-  // Items currently checked out — sum outQty across every (non-retired) item.
-  // Equivalent to "items currently out at active events" per REP-02 by way of
-  // the seed-data invariant (Plan 02): outQty == sum of open-checkout qty.
-  const itemsOut = useMockStore((s) =>
-    s.items.reduce((sum, i) => sum + i.outQty, 0),
-  );
-
-  const cards: ReadonlyArray<{ label: string; value: number; icon: LucideIcon }> = [
-    { label: "Active events", value: activeEvents.length, icon: Calendar },
+export function KpiCards({
+  totalItems,
+  itemsOut,
+  lowStockCount,
+  activeEvents,
+}: {
+  totalItems: number;
+  itemsOut: number;
+  lowStockCount: number;
+  activeEvents: number;
+}) {
+  const cards: ReadonlyArray<{
+    label: string;
+    value: number;
+    icon: LucideIcon;
+  }> = [
+    { label: "Active events", value: activeEvents, icon: Calendar },
     { label: "Items checked out", value: itemsOut, icon: PackageOpen },
-    { label: "Low stock", value: lowStock.length, icon: AlertTriangle },
-    { label: "Open missing", value: openMissing.length, icon: AlertCircle },
+    { label: "Low stock", value: lowStockCount, icon: AlertTriangle },
+    { label: "Total items", value: totalItems, icon: AlertCircle },
   ];
 
   return (

@@ -1,14 +1,18 @@
-// Phase 1 dashboard — Recent activity feed (last 20 transactions, newest first).
+// Phase 2 dashboard — Recent activity feed (Block G UI swap, plan 02-10).
 //
 // REQUIREMENTS.md AUD-01 — every transaction carries a denormalized
-// `actorRoleAtTimeOfAction` snapshot (the role at write-time, not the user's
-// current role). This widget surfaces that snapshot in the meta line per
-// AUD-01's audit-trail intent.
+// `actorRoleAtTimeOfAction` snapshot (the role at write-time). This widget
+// surfaces that snapshot in the meta line per AUD-01's audit-trail intent.
 //
-// Subscribes to the mock store via useSyncExternalStore through
-// `selectRecentActivity`. Any later mutation in the session (checkout,
-// checkin, resolveMissing, etc.) appends a new transaction and bumps this
-// feed to the top.
+// Phase 2 swap from Phase 1:
+//   - useMockStore + selectRecentActivity → useTransactionsLive scoped to
+//     {limit: 20} (D-20 listener window for the dashboard widget).
+//   - Newest-first ordering preserved (composite index transactions(at desc)
+//     via Firestore's automatic single-field index).
+//
+// No filter axes — the widget shows the global activity tail. For filtered
+// views see /reports/history (HistoryTable consumes useTransactionsLive with
+// URL-driven filter state).
 
 "use client";
 
@@ -20,9 +24,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/feature/status/StatusBadge";
-import { statusToTone, statusToLabel } from "@/components/feature/status/status-to-tone";
-import { useMockStore } from "@/lib/hooks/use-mock-store";
-import { selectRecentActivity } from "@/lib/mock/selectors";
+import {
+  statusToTone,
+  statusToLabel,
+} from "@/components/feature/status/status-to-tone";
+import { useTransactionsLive } from "@/lib/hooks/use-transactions-live";
 
 function actionVerb(type: string): string {
   switch (type) {
@@ -40,7 +46,7 @@ function actionVerb(type: string): string {
 }
 
 export function RecentActivityFeed() {
-  const txs = useMockStore((s) => selectRecentActivity(s, 20));
+  const txs = useTransactionsLive({ limit: 20 });
   return (
     <Card>
       <CardHeader className="pb-3">
