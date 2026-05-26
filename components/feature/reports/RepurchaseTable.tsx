@@ -11,8 +11,8 @@
 //   - useMockStore + selectLowStockItems → useInventoryLive scoped to
 //     {isLowStock: true, limit: 50} (D-20 listener window).
 //   - markLowStockOrdered (mock mutator) → markLowStockOrdered Server Action;
-//     useTransition for pending state. seedUsers.find() actor lookup removed
-//     — Server Action derives actor via requireAdmin().
+//     useTransition for pending state. Phase 1 mock-store actor lookup
+//     removed — Server Action derives the actor via requireAdmin().
 //   - Marked-as-ordered items are excluded client-side (lowStockOrderedAt !==
 //     null) so the list shrinks the moment the action commits.
 //

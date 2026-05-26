@@ -12,8 +12,8 @@
 //     {isLowStock: true, limit: 50} (D-20 listener window).
 //   - markLowStockOrdered mock mutator → markLowStockOrdered Server Action
 //     from app/(app)/inventory/actions.ts; useTransition for pending state.
-//   - seedUsers.find() actor lookup removed — Server Action derives actor
-//     via requireAdmin().
+//   - Phase 1 mock-store actor lookup removed — Server Action derives the
+//     actor via requireAdmin() server-side.
 //
 // Note: the widget consumes a SSR-seeded `initialItems` prop so the first
 // paint matches what useInventoryLive will resolve once the auth-gated

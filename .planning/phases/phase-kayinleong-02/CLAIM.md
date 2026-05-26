@@ -6,7 +6,7 @@
 - started: 2026-05-25
 - status: in-progress
 - summary: Functionality — wire Firebase Auth + Firestore + 2 Cloud Functions + Storage; replace every mock with real backend; UI surface frozen from Phase 1
-- current plan: 02-10 (reports + dashboard count() aggregations — Wave 10, Block G); 02-09 checkin + missing PASS + Block F rules audit logged; event status now derived from dates (commit b23c449); Cloud Functions removed and inlined into Server Actions per D-02 re-amendment
+- current plan: 02-10 (reports + dashboard count() aggregations — Wave 10, Block G) code complete, awaiting E2E + Block G rules audit; 02-09 checkin + missing PASS + Block F rules audit logged; event status now derived from dates (commit b23c449); Cloud Functions removed and inlined into Server Actions per D-02 re-amendment
 
 ## What will change
 
@@ -229,6 +229,53 @@ User-attested manual Firebase Console Rules Playground audit per D-06 mitigation
 - Architecture preserved: no `functions/` directory (stays deleted), `firestore.rules` / `firestore.indexes.json` / `storage.rules` / `firebase.json` / `lib/firebase/admin.ts` / `lib/firebase/client.ts` / `lib/auth/dal.ts` / `proxy.ts` UNTOUCHED. `lib/mock/*` shim files still present (deletion deferred to 02-11).
 - See `.planning/phases/phase-kayinleong-02/02-09-checkin-action-and-missing-SUMMARY.md` for full details + deviation register + checkpoint instructions.
 - **Plan 02-09 gate:** awaiting E2E smoke (smokes A–G) + Block F rules audit (5 cases) per SUMMARY.md CHECKPOINT section — populated below.
+
+### Plan 02-10 (reports + dashboard aggregations — Wave 10, Block G) — code complete; E2E + Block G rules audit pending (2026-05-26)
+
+- `lib/data/aggregations.server.ts` (NEW): `getDashboardKpis` (4 Firestore `count()` aggregations per CONTEXT D-21 — totalItems where `lifecycleState != retired`, itemsOut where `outQty > 0`, lowStockCount where `isLowStock == true`, activeEvents where `status == active`) + `getLowStockCount` (RP-03 nav badge source). NOT real-time — refetched on revalidatePath('/') and on every layout render. Commit `69f5c60`.
+- `lib/data/transactions.server.ts` (NEW): `getTransactionsPage({cursor, limit, filters})` cursor-paged Admin SDK reader with single-axis filter support (eventId / itemId / actorUid / type) per REP-04. Composite indexes from 02-02 cover each filter axis. Timestamp → ISO conversion preserves Phase 1 TransactionDoc contract. Commit `69f5c60`.
+- `components/feature/dashboard/KpiCards.tsx` (MOD): Server Component child receiving 4 numeric props (NO `"use client"` directive, NO `useMockStore`, NO `.reduce()`). D-21 satisfied. Commit `3842f68`.
+- `components/feature/dashboard/LowStockWidget.tsx` (MOD): `useInventoryLive` scoped `{isLowStock:true, limit:50}` + `markLowStockOrdered` Server Action via `useTransition`. SSR-seeded `initialItems` prop. Commit `3842f68`.
+- `components/feature/dashboard/RecentActivityFeed.tsx` (MOD): `useTransactionsLive({limit:20})` — global activity tail. Commit `3842f68`.
+- `app/(app)/page.tsx` (MOD): parallelizes `getDashboardKpis` + `getEventsPage(active)` + `getInventoryPage(isLowStock)`; passes counts to KpiCards as props. Commit `3842f68`.
+- `components/layout/Nav.tsx` (NEW, Rule 3 deviation): Client Component exporting `LowStockBadge` (uses `useInventoryLive` scoped `{isLowStock:true, limit:50}`; renders null when count==0, "50+" when listener window saturates). `components/feature/shell/AppSidebar.tsx` + `components/feature/shell/MobileNavSheet.tsx` import and render it next to the Reports nav item per RP-03. Plan referenced `components/layout/Nav.tsx` directly; actual nav surface is split, so the shared badge component lives there. Commit `5dc6aae`.
+- `app/(app)/reports/stock/page.tsx` + `components/feature/reports/StockReportTable.tsx` (MOD): `getInventoryPage` SSR seed + `useInventoryLive` takeover; URL filters `category` + `lifecycleState`; cursor Prev/Next chrome per D-17. Default view excludes retired items unless `?lifecycleState=retired`. D-11 sortable-columns rule preserved (sortable: name, availableQty). Commit `e2a979f`.
+- `app/(app)/reports/out/page.tsx` + `components/feature/reports/ItemsOutTable.tsx` (MOD): `getTransactionsPage{type:'checkout', eventId}` SSR seed; table subscribes to both checkout + checkin streams via `useTransactionsLive` and derives open rows via `parentTxId` set difference (same pattern as `EventAssignedItemsTab` from 02-08). REP-02 satisfied. Commit `e2a979f`.
+- `app/(app)/reports/history/page.tsx` + `components/feature/reports/HistoryTable.tsx` (MOD): `getTransactionsPage` SSR with 4 URL filter keys (type / eventId / itemId / actorUid). Live listener picks first set filter axis to match a composite index; multi-axis filters fall back to client-side filter over the 50-row cursor window + SSR cursor refresh. REP-04 + REP-06 satisfied. Commit `025693d`.
+- `app/(app)/reports/missing/page.tsx` + `components/feature/reports/MissingItemsTable.tsx` (MOD): `getMissingPage` SSR seed (default `status=open` per REP-03) + `useMissingLive` takeover. Status dropdown allows switching to `found` / `writtenOff`. ResolveMissingSheet preserved — already on `resolveMissing` Server Action from 02-09. Commit `6c4a178`.
+- `app/(app)/reports/repurchase/page.tsx` + `components/feature/reports/RepurchaseTable.tsx` (MOD): `getInventoryPage{isLowStock:true}` SSR seed + `useInventoryLive` takeover. `markLowStockOrdered` Server Action via `useTransition` (no `seedUsers.find` actor lookup). Items with `lowStockOrderedAt` set are client-side excluded so the actionable list shrinks immediately. v1 scope: low-stock signal only; "frequently-flagged-missing" secondary signal deferred (requires cross-collection aggregation). Commit `6c4a178`.
+- Deviations (auto-fixes):
+  - Rule 3 — `components/layout/Nav.tsx` did not exist (plan's named target); created the file as shared `LowStockBadge` Client Component imported from both AppSidebar and MobileNavSheet.
+  - Rule 1 — Initial multi-line `.count().get()` chains failed the grep-based acceptance criterion that counts lines. Reformatted onto single lines.
+  - Rule 3 — Doc-comment cleanup: removed literal `seedUsers.find` mentions that tripped the "no mock references" criterion.
+- Verification gates: `npx tsc --noEmit` PASS, `npm run lint` PASS (0 errors, 12 pre-existing `react-hooks/incompatible-library` warnings from TanStack `useReactTable` — same set as plans 02-06/07/08/09), `npm run build` PASS (28 routes, proxy.ts recognized).
+- Architecture preserved: no `functions/` directory, no `middleware.ts`, no `verifySessionCookie`/`createSessionCookie`/`enableIndexedDbPersistence`; `firestore.rules` / `firestore.indexes.json` / `storage.rules` / `firebase.json` / `proxy.ts` / DAL / Firebase clients / Server Actions in inventory/users/events/checkout/checkin/missing UNTOUCHED. All new listeners gated on `onAuthStateChanged` (zero new raw `onSnapshot` — all consumers reuse the 4 existing live hooks).
+- See `.planning/phases/phase-kayinleong-02/02-10-reports-and-aggregations-SUMMARY.md`.
+- **Plan 02-10 gate:** awaiting end-to-end smoke (6 rows below) + Block G rules audit (4 cases) per SUMMARY.md.
+
+## E2E Smoke + Block G Rules Audit — Plan 02-10 (awaiting attestation)
+
+To close phase-kayinleong-02 plan 02-10, the user runs the following sequence and attests results here.
+
+### Smoke (6 rows)
+
+| # | Scenario | Expected | Result |
+|---|----------|----------|--------|
+| A | Visit `/` as admin → 4 KPI cards render. | Counts match Firestore reality. After a checkout commits, refresh `/` → "Items checked out" bumps by 1. | pending |
+| B | Create item totalQty=5, lowStockThreshold=10 → `isLowStock=true` immediately. Visit any page. | Nav (desktop + mobile) shows badge "1" next to Reports. Mark item as ordered (from /reports/repurchase or LowStockWidget) → badge disappears within next nav cycle. | pending |
+| C | `/reports/stock?category=Audio` then copy URL into fresh tab. | Audio filter applied + cursor preserved on refresh. Cursor pagination Prev/Next works once >50 items exist. | pending |
+| D | `/reports/out` shows checkouts NOT closed by a matching checkin (`parentTxId`). Filter `?eventId=<id>` scopes correctly. | Open count matches `transactions where type='checkout'` AND id NOT IN any `transactions where type='checkin'.parentTxId`. | pending |
+| E | `/reports/history?type=checkout` filter applies; switch to `?type=missing` → list re-renders. | No "needs index" warning in dev console (composite indexes from 02-02 cover the single-axis filters). | pending |
+| F | `/reports/repurchase` — click "Mark as ordered" on a row. | Row disappears from list immediately (client-side filter on `lowStockOrderedAt`). Reload — still gone. Nav badge count updates. | pending |
+
+### Block G Rules Audit (4 cases)
+
+| # | Path | Auth | Op | Expected | Result |
+|---|------|------|-----|----------|--------|
+| 1 | inventory aggregation `count()` via Web SDK (any signed-in path) | Signed-in staff | read | ALLOW (firestore.rules:50 `allow get, list: if isSignedIn()`) | pending |
+| 2 | transactions list with `type==checkout` filter | Signed-in staff | read | ALLOW (firestore.rules:73) | pending |
+| 3 | events with `status==active` list — staff lists across project | Signed-in staff NOT in allowedStaff | read | DENY (isMember rule, firestore.rules:61) — event must include uid in allowedStaff | pending |
+| 4 | missingItems list | Signed-in staff | read | ALLOW (firestore.rules:79) | pending |
 
 ## E2E Smoke + Block F Rules Audit — Plan 02-09 (awaiting attestation)
 
