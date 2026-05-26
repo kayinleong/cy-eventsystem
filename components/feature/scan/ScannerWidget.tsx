@@ -19,6 +19,15 @@
 // button on devices that expose `MediaStreamTrack.getCapabilities().torch`
 // (Chrome Android). iOS Safari does not expose torch — the button simply
 // won't render on those devices. No extra work to gate this per platform.
+//
+// Phase 2 / Plan 02-13 — RES-02 + D-19 offline gate: when navigator.onLine
+// === false the widget short-circuits to a disabled placeholder. Stock
+// decrements depend on the server-side transactional check; allowing scans
+// to queue while offline would race the eventual reconnect and could
+// silently double-commit. Read-side caching (RES-01) is unaffected and
+// continues to operate via persistentLocalCache. This single gate covers
+// every scanner-bearing surface (/scan, /events/[id]/checkout,
+// /events/[id]/checkin) because they all mount this widget.
 
 "use client";
 
@@ -28,7 +37,7 @@ import {
   type IDetectedBarcode,
   type IScannerError,
 } from "@yudiel/react-qr-scanner";
-import { Camera, CameraOff } from "lucide-react";
+import { Camera, CameraOff, WifiOff } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -40,6 +49,10 @@ export function ScannerWidget({ paused = false }: { paused?: boolean }) {
   const lastValue = useRef<{ value: string; at: number } | null>(null);
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [active, setActive] = useState(false);
+  // RES-02 + D-19 — online-state gate. Default true so SSR + initial client
+  // render don't flash the disabled state for users who are actually online.
+  // The effect below reconciles immediately with navigator.onLine on mount.
+  const [online, setOnline] = useState(true);
 
   // Stop the stream on unmount (battery / tab-switch hygiene).
   useEffect(() => {
@@ -47,6 +60,38 @@ export function ScannerWidget({ paused = false }: { paused?: boolean }) {
       setActive(false);
     };
   }, []);
+
+  // RES-02 + D-19 — subscribe to network state.
+  useEffect(() => {
+    const update = () =>
+      setOnline(typeof navigator !== "undefined" && navigator.onLine);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
+
+  // Going offline mid-session: tear down the camera stream as well so the
+  // library cleanup runs and battery / privacy don't take a hit while the
+  // user can't actually scan anything anyway.
+  useEffect(() => {
+    if (!online && active) setActive(false);
+  }, [online, active]);
+
+  if (!online) {
+    return (
+      <div className="aspect-square w-full max-w-md mx-auto bg-muted rounded-lg flex flex-col items-center justify-center text-center gap-3 px-6">
+        <WifiOff className="size-8 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">
+          Scanner disabled while offline. Reconnect to scan or use manual entry
+          to queue items.
+        </p>
+      </div>
+    );
+  }
 
   const isPaused = paused || !active || !selectedEvent || !!permissionError;
 
