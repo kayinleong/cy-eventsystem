@@ -31,6 +31,29 @@
 // requireSession() server-side. The Phase 1 mock-actor lookup block (which
 // did `find(u => u.uid === session.uid)` against the mock-user seed) is
 // deleted.
+//
+// Plan 02-13 (RES-03 full delivery) — scan-cart persistence to sessionStorage.
+// The Phase 1 / Plan 02-08 implementation kept cart + selectedEvent + mode in
+// React state only, so an accidental browser refresh or token refresh during
+// a scan session lost everything. We now mirror those three pieces to
+// sessionStorage under the versioned key `scan-cart-v1` so RES-03 is fully
+// delivered (not just partially via Firestore IndexedDB cache):
+//   - hydrate on ScanSessionProvider mount, skipping stale (>4h) or corrupt
+//     payloads;
+//   - mirror every change via a single useEffect (mutators themselves are
+//     unchanged — no public-API churn for ScanCartPanel / ScannerWidget /
+//     EventPickerDialog consumers);
+//   - clear on successful commit (explicit clearPersisted() in the commit
+//     success path so cross-tab listeners fire immediately; the mirror
+//     useEffect also handles this defensively);
+//   - cross-tab sync via the `storage` event so two tabs don't fight;
+//   - SSR-safe — every sessionStorage access is guarded with
+//     `typeof window !== "undefined"`.
+//
+// Threat-model: T-02-13-03 — the persisted payload is non-PII (SKUs +
+// quantities + event metadata already readable by the signed-in user). The
+// risk of leaving the data across sign-out on a shared device is documented
+// as accepted in the plan threat register.
 
 "use client";
 
@@ -38,6 +61,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -60,6 +84,79 @@ export type ScanCartLine = {
   qty: number;
   availableQty: number;
 };
+
+// RES-03 — versioned sessionStorage key. Bump the suffix if the persisted
+// shape ever changes so old sessions invalidate cleanly instead of crashing
+// the hydration parse.
+const STORAGE_KEY = "scan-cart-v1";
+// Sessions older than 4h are treated as abandoned — likely a user closed the
+// tab last night and reopened today, in which case rehydrating yesterday's
+// cart would be surprising and possibly wrong (stock has shifted).
+const STALE_MS = 4 * 60 * 60 * 1000;
+
+type PersistedScanSession = {
+  cart: ScanCartLine[];
+  selectedEvent: EventDoc | null;
+  mode: ScanMode;
+  timestamp: number;
+};
+
+function loadPersisted(): PersistedScanSession | null {
+  if (typeof window === "undefined") return null;
+  try {
+    // sessionStorage.getItem scan-cart-v1
+    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<PersistedScanSession>;
+    if (!parsed || typeof parsed !== "object") return null;
+    if (typeof parsed.timestamp !== "number") return null;
+    if (Date.now() - parsed.timestamp > STALE_MS) return null;
+    if (parsed.mode !== "checkout" && parsed.mode !== "checkin") return null;
+    if (!Array.isArray(parsed.cart)) return null;
+    // selectedEvent is allowed to be null (user picked mode but not an event
+    // yet, then refreshed). Guard against malformed object shapes only.
+    if (
+      parsed.selectedEvent !== null &&
+      (typeof parsed.selectedEvent !== "object" ||
+        typeof (parsed.selectedEvent as EventDoc).id !== "string")
+    ) {
+      return null;
+    }
+    return {
+      cart: parsed.cart as ScanCartLine[],
+      selectedEvent: (parsed.selectedEvent as EventDoc | null) ?? null,
+      mode: parsed.mode,
+      timestamp: parsed.timestamp,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function savePersisted(snapshot: Omit<PersistedScanSession, "timestamp">) {
+  if (typeof window === "undefined") return;
+  try {
+    const payload: PersistedScanSession = {
+      ...snapshot,
+      timestamp: Date.now(),
+    };
+    // sessionStorage.setItem scan-cart-v1
+    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // quota exceeded / private mode — RES-03 is best-effort; degrade silently
+    // so a Safari private window doesn't break the active session.
+  }
+}
+
+function clearPersisted() {
+  if (typeof window === "undefined") return;
+  try {
+    // sessionStorage.removeItem scan-cart-v1
+    window.sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore — see savePersisted comment.
+  }
+}
 
 export type ScanSessionContextValue = {
   mode: ScanMode;
@@ -87,12 +184,87 @@ export function ScanSessionProvider({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const [mode, setMode] = useState<ScanMode>(initialMode);
-  const [selectedEvent, setSelectedEvent] = useState<EventDoc | null>(
-    initialEvent,
-  );
-  const [cart, setCart] = useState<ScanCartLine[]>([]);
+
+  // RES-03 — hydrate cart/event/mode from sessionStorage if a recent session
+  // exists. The initial-state seed runs once on Provider mount (functional
+  // initializer ensures `loadPersisted()` is called only on the first render
+  // and only client-side via the `typeof window` guard inside).
+  //
+  // Hydration precedence rules:
+  //   - For `selectedEvent`: an explicit `initialEvent` prop (e.g.,
+  //     /events/[id]/checkout passes the event from the server) always wins
+  //     over persisted state. The persisted event is only used when the
+  //     mount-site doesn't supply one (the /scan page).
+  //   - For `mode`: a persisted mode wins over `initialMode` so a refresh of
+  //     /scan?mode=checkout doesn't clobber a session the user had toggled
+  //     into check-in mode. The /events/[id]/checkout page hard-codes
+  //     `initialMode="checkout"` and doesn't persist event-bound checkout
+  //     across navigations because its eventId is part of the URL — so we
+  //     match the persisted mode only when no initialEvent is provided
+  //     (i.e., the /scan flow). This keeps event-bound pages deterministic.
+  //   - For `cart`: always rehydrated. Even if the page provides a fresh
+  //     initialEvent, recovering an in-progress cart for that event is the
+  //     whole point of RES-03.
+  const [mode, setMode] = useState<ScanMode>(() => {
+    const persisted = loadPersisted();
+    if (initialEvent) return initialMode;
+    return persisted?.mode ?? initialMode;
+  });
+  const [selectedEvent, setSelectedEvent] = useState<EventDoc | null>(() => {
+    const persisted = loadPersisted();
+    if (initialEvent) return initialEvent;
+    return persisted?.selectedEvent ?? null;
+  });
+  const [cart, setCart] = useState<ScanCartLine[]>(() => {
+    const persisted = loadPersisted();
+    return persisted?.cart ?? [];
+  });
   const [isCommitting, setIsCommitting] = useState(false);
+
+  // RES-03 — mirror every relevant state change to sessionStorage. When the
+  // user fully clears their session (no cart, no event), we remove the key
+  // outright so a stale empty payload doesn't sit around eating storage and
+  // looking like work-in-progress to the hydration path.
+  useEffect(() => {
+    if (cart.length === 0 && !selectedEvent) {
+      clearPersisted();
+      return;
+    }
+    savePersisted({ cart, selectedEvent, mode });
+  }, [cart, selectedEvent, mode]);
+
+  // RES-03 — cross-tab sync. If the user opens /scan in two tabs and commits
+  // in tab A, tab B should clear its cart so they can't double-submit. The
+  // `storage` event only fires in *other* tabs (never the originator), so
+  // this is safe and cheap insurance.
+  useEffect(() => {
+    function onStorage(e: StorageEvent) {
+      if (e.key !== STORAGE_KEY) return;
+      if (e.newValue === null) {
+        // Another tab cleared the session (likely a successful commit).
+        setCart([]);
+        // Don't clobber an explicit initialEvent — event-bound pages remain
+        // anchored to their URL even if a sibling tab cleared its picker.
+        if (!initialEvent) setSelectedEvent(null);
+        return;
+      }
+      try {
+        const parsed = JSON.parse(e.newValue) as PersistedScanSession;
+        if (parsed.mode !== "checkout" && parsed.mode !== "checkin") {
+          return;
+        }
+        setCart(Array.isArray(parsed.cart) ? parsed.cart : []);
+        if (!initialEvent) {
+          setSelectedEvent(parsed.selectedEvent ?? null);
+          setMode(parsed.mode);
+        }
+      } catch {
+        // ignore corrupt storage events
+      }
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [initialEvent]);
 
   // Live inventory subscription — replaces Phase 1's useMockStore((s) => s.items).
   // limit: 500 covers v1 scale (D-16 projects 5000+ items eventually, but the
@@ -243,7 +415,13 @@ export function ScanSessionProvider({
       toast.success(
         `${cart.length} ${cart.length === 1 ? "item" : "items"} checked out`,
       );
+      // RES-03 — successful commit means there's no work-in-progress left.
+      // We clear the cart (the mirror useEffect would also unset the key,
+      // but the explicit removeItem ensures cross-tab listeners fire
+      // immediately even if React batches the state updates around the
+      // router.push that follows).
       setCart([]);
+      clearPersisted();
       // Defense-in-depth: revalidatePath has run server-side; refresh the
       // current segment so the user sees the new outQty + audit feed when
       // landing on /events/<id>.
