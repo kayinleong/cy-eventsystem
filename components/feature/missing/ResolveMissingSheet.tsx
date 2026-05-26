@@ -1,28 +1,33 @@
-// Phase 1 — Resolve Missing item Sheet.
+// Phase 2 — Resolve Missing item Sheet.
 //
 // REQUIREMENTS:
 //   - MIS-02 — admin resolves an open missing-item record from /reports/missing.
 //   - MIS-03 — resolution is either `found` (returns qty to availableQty) or
 //     `writtenOff` (decrements totalQty).
 //   - MIS-04 — resolution writes a follow-up adjustment transaction (handled
-//     inside store.resolveMissing).
+//     inside resolveMissing Server Action / Plan 02-09).
 //   - UI-SPEC "Sheets vs Dialogs" (Shared #8) — Sheet for the resolve flow
 //     (multi-field form on the right rail).
 //
+// Phase 2 change: swap `store.resolveMissing` (mock) → `resolveMissing`
+// Server Action from app/(app)/reports/missing/actions.ts. The Action enforces
+// requireAdmin() server-side AND firestore.rules denies all missingItems
+// client writes, so the only way to resolve is via this Sheet (defense in
+// depth). useTransition wraps the call so the form shows pending state;
+// router.refresh() after success forces revalidatePath to surface on the
+// table immediately (defense-in-depth vs. live-listener latency).
+//
 // Form composition uses shadcn v4 <Field> primitives + rhf register/Controller
-// per D-01-04-B / D-01-06-A / D-01-07-A — the legacy <Form> / <FormField>
-// Context wrapper does NOT exist in the v4 radix-nova registry (the form entry
-// is empty), so we never import from `@/components/ui/form`.
+// per D-01-04-B / D-01-06-A / D-01-07-A.
 //
-// Actor-resolution pattern from Plan 05 D-01-05-E: read useCurrentUser() for
-// the role/uid, resolve the full UserDoc from seedUsers at submit time, call
-// store.resolveMissing with the resolved actor.
-//
-// AUTH-10 / MIS-03 — admin-only: the sheet returns null for non-admin sessions.
+// AUTH-10 / MIS-03 — admin-only: the sheet returns null for non-admin sessions
+// (matching Phase 1 behavior). The server action also rejects non-admin
+// callers, but client-side hiding the button keeps the UI tidy.
 
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -49,8 +54,7 @@ import {
   ResolveMissingSchema,
   type ResolveMissingInput,
 } from "@/lib/schemas/missing-item";
-import { resolveMissing } from "@/lib/mock/store";
-import { seedUsers } from "@/lib/mock/users";
+import { resolveMissing } from "@/app/(app)/reports/missing/actions";
 import { useCurrentUser } from "@/lib/hooks/use-current-user";
 
 export function ResolveMissingSheet({
@@ -61,6 +65,8 @@ export function ResolveMissingSheet({
   itemName: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
   const session = useCurrentUser();
 
   const {
@@ -79,19 +85,29 @@ export function ResolveMissingSheet({
   if (session?.role !== "admin") return null;
 
   function onSubmit(values: ResolveMissingInput) {
-    const actor = session
-      ? seedUsers.find((u) => u.uid === session.uid)
-      : undefined;
-    if (!actor) {
-      toast.error("Couldn't resolve");
-      return;
-    }
-    resolveMissing(values.missingId, values.resolution, actor);
-    toast.success(
-      values.resolution === "found" ? "Marked as found" : "Written off",
-    );
-    setOpen(false);
-    reset({ missingId, resolution: "found", notes: "" });
+    // Server Action enforces admin role + missingItems doc existence +
+    // not-already-resolved invariants. The Sheet shows the result via
+    // toast and closes on success.
+    startTransition(async () => {
+      const result = await resolveMissing({
+        missingId: values.missingId,
+        resolution: values.resolution,
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(
+        values.resolution === "found" ? "Marked as found" : "Written off",
+      );
+      setOpen(false);
+      reset({ missingId, resolution: "found", notes: "" });
+      // Defense-in-depth: revalidatePath in the Server Action handles
+      // SSR re-fetch, but useMissingLive subscribes on the client too.
+      // router.refresh() bridges any window between the listener update
+      // and the user navigating away.
+      router.refresh();
+    });
   }
 
   return (
@@ -178,10 +194,13 @@ export function ResolveMissingSheet({
               type="button"
               variant="outline"
               onClick={() => setOpen(false)}
+              disabled={pending}
             >
               Cancel
             </Button>
-            <Button type="submit">Confirm</Button>
+            <Button type="submit" disabled={pending}>
+              {pending ? "Resolving…" : "Confirm"}
+            </Button>
           </SheetFooter>
         </form>
       </SheetContent>
