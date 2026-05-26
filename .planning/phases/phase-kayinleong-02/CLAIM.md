@@ -6,7 +6,7 @@
 - started: 2026-05-25
 - status: in-progress
 - summary: Functionality — wire Firebase Auth + Firestore + 2 Cloud Functions + Storage; replace every mock with real backend; UI surface frozen from Phase 1
-- current plan: 02-11 COMPLETE (Server Action audit + lib/mock wholesale wipe — Wave 11, Block H); Phase 2 data plane closed — every Server Action audited PASS, mock layer deleted (~93 KB reclaimed). 02-10 reports + Block G rules audit PASS; reports sub-nav fix (commit 319fa9c) + sidebar matchPrefix fix (d7dcda5); event status derived from dates; Cloud Functions removed and inlined into Server Actions per D-02 re-amendment
+- current plan: 02-12 COMPLETE (per-segment error / loading / not-found / unauthorized boundaries — Wave 11, Block H NFR-05/AUTH-10); 9 special files shipped across `(app)/*`, item & event dynamic routes, inventory/events/reports section roots, and top-level `unauthorized.tsx` (paired with future Next 16 `unauthorized()` call). T-02-12-01 mitigated (error.tsx renders only `error.digest`, never `error.message`); T-02-12-02 mitigated (event not-found copy intentionally ambiguous between "missing" and "no access" to defeat enumeration). 02-11 COMPLETE (Server Action audit + lib/mock wholesale wipe — every Server Action audited PASS, mock layer deleted ~93 KB reclaimed).
 
 ## What will change
 
@@ -269,6 +269,27 @@ User-attested manual Firebase Console Rules Playground audit per D-06 mitigation
 - Architecture preserved: no `functions/` directory recreated, no `middleware.ts`, no Server Action modifications during audit (audit-only per plan scope). `firestore.rules` / `firestore.indexes.json` / `storage.rules` / `firebase.json` / `proxy.ts` / DAL / Firebase clients / all `actions.ts` files UNTOUCHED.
 - See `.planning/phases/phase-kayinleong-02/02-11-server-action-and-revalidate-audit-SUMMARY.md` + `.planning/phases/phase-kayinleong-02/audit-server-actions.md`.
 - **Plan 02-11 gate:** none — the audit IS the deliverable and the mock wipe self-verifies via `npm run build` exit 0.
+
+### Plan 02-12 (per-segment error / loading / not-found / unauthorized boundaries — Wave 11, Block H) — complete (2026-05-26)
+
+- **9 special files shipped** across two atomic commits:
+  - Task 1 (commit `c5759d8`): app-wide boundaries.
+    - `app/(app)/error.tsx` — Client Component (T-02-12-01 mitigation; renders only friendly copy + `error.digest`; `error.message` confined to `console.error()`).
+    - `app/(app)/loading.tsx` — Server Component skeleton wrapped by Suspense.
+    - `app/(app)/not-found.tsx` — generic 404 inside the authenticated shell.
+    - `app/unauthorized.tsx` — top-level pair for Next 16 `unauthorized()` function (AUTH-10). Coexists with the existing `app/(app)/unauthorized/page.tsx` (current `redirect("/unauthorized")` target from `requireAdmin()` in `lib/auth/dal.ts`); the latter remains until the DAL graduates off experimental `authInterrupts`.
+  - Task 2 (commit `28b5a88`): route-specific boundaries.
+    - `app/(app)/inventory/[itemId]/not-found.tsx` — "Item not found" → /inventory.
+    - `app/(app)/events/[eventId]/not-found.tsx` — T-02-12-02 anti-enumeration: copy intentionally ambiguous between "doesn't exist" and "you lack access" so staff can't probe whether an `eventId` exists outside their `allowedStaff` projection (EVT-08).
+    - `app/(app)/inventory/loading.tsx` — title + filter bar + 8-row table skeleton (matches InventoryTable shape).
+    - `app/(app)/events/loading.tsx` — title + status chip row + 8-row card skeleton (matches EventsTable shape).
+    - `app/(app)/reports/loading.tsx` — light skeleton; reports/layout.tsx ReportsTabs stays visible during stream.
+- **HTML hygiene fix** (deviation Rule 2): PLAN.md examples wrapped inner-segment boundaries in `<main>`. `(app)/layout.tsx` already renders `<main>`, so nested `<main>` would be invalid HTML. Inner files use `<div>`; only top-level `app/unauthorized.tsx` keeps `<main>` as the page landmark.
+- **`reset` vs `unstable_retry`:** error.tsx uses the stable `reset` prop. Next 16 docs recommend `unstable_retry()` but `reset` is still fully supported and avoids the experimental `unstable_` prefix per AGENTS.md "heed deprecation notices" framing (no deprecation notice on `reset`).
+- **Out-of-scope WIP discovered** (deviation Rule 3): During verification a 184-line uncommitted modification to `components/feature/scan/scan-session.tsx` appeared (Plan 02-13 RES-03 sessionStorage persistence work). Per SCOPE BOUNDARY, reverted with `git checkout` so it does NOT ride in plan 02-12's commits. Plan 02-13's owner re-applies.
+- Verification gates: `npx tsc --noEmit` PASS, `npm run build` PASS (26 routes generated, Turbopack 4.9s compile), `npm run lint` baseline unchanged at 13 pre-existing problems (1 error in `ScannerWidget.tsx` from plan 02-09 + 12 TanStack `useReactTable` warnings) — **0 new lint issues introduced by plan 02-12**.
+- Architecture preserved: no Server Action / data layer / Firestore rules / proxy.ts / DAL / Firebase client modifications. No new dependencies. No experimental Next 16 APIs invoked (`unauthorized()` itself is invoked nowhere yet — the file is staged for future use).
+- See `.planning/phases/phase-kayinleong-02/02-12-error-loading-not-found-segments-SUMMARY.md`.
 
 ## E2E Smoke + Block G Rules Audit — Plan 02-10 (awaiting attestation)
 
