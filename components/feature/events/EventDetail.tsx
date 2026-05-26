@@ -35,6 +35,7 @@ import {
 } from "@/components/feature/status/status-to-tone";
 import type { EventDoc } from "@/lib/types/event";
 import type { UserDoc } from "@/lib/types/user";
+import { deriveEventStatus } from "@/lib/utils/event-status";
 import { EventAssignedItemsTab } from "./EventAssignedItemsTab";
 import { EventHistoryTab } from "./EventHistoryTab";
 import { CancelEventDialog } from "./CancelEventDialog";
@@ -63,23 +64,25 @@ export function EventDetail({
   const resolveName = (uid: string) =>
     users.find((u) => u.uid === uid)?.displayName ?? uid;
 
-  const primary =
-    event.status === "planned"
-      ? {
-          label: "Start check-out",
-          href: `/events/${event.id}/checkout`,
-          icon: ScanLine,
-        }
-      : event.status === "active"
-        ? {
-            label: "Check in",
-            href: `/events/${event.id}/checkin`,
-            icon: ArrowDownToLine,
-          }
-        : null;
+  // Derive effective status from dates + stored cancellation, so manual
+  // Firestore edits to startDate/endDate reflect immediately in the UI
+  // (the stored `status` field is informational; lifecycle is date-driven).
+  const effectiveStatus = deriveEventStatus(event);
+
+  // Action visibility:
+  //   - planned   → only "Start check-out" (event hasn't started yet)
+  //   - active    → both "Start check-out" + "Check in"
+  //   - completed → only "Check in" (event ended; reconcile any open items)
+  //   - cancelled → neither (terminal)
+  const showCheckout =
+    effectiveStatus === "planned" || effectiveStatus === "active";
+  const showCheckin =
+    effectiveStatus === "active" || effectiveStatus === "completed";
 
   const showCancel =
-    isAdmin && event.status !== "cancelled" && event.status !== "completed";
+    isAdmin &&
+    effectiveStatus !== "cancelled" &&
+    effectiveStatus !== "completed";
 
   return (
     <div className="space-y-6">
@@ -87,8 +90,8 @@ export function EventDetail({
         <div className="space-y-2">
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-lg font-semibold">{event.name}</h1>
-            <StatusBadge tone={statusToTone(event.status)}>
-              {statusToLabel(event.status)}
+            <StatusBadge tone={statusToTone(effectiveStatus)}>
+              {statusToLabel(effectiveStatus)}
             </StatusBadge>
           </div>
           <p className="text-sm text-muted-foreground">
@@ -97,11 +100,19 @@ export function EventDetail({
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
-          {primary ? (
+          {showCheckout ? (
             <Button asChild>
-              <Link href={primary.href}>
-                <primary.icon className="mr-2 size-4" />
-                {primary.label}
+              <Link href={`/events/${event.id}/checkout`}>
+                <ScanLine className="mr-2 size-4" />
+                Start check-out
+              </Link>
+            </Button>
+          ) : null}
+          {showCheckin ? (
+            <Button asChild variant={showCheckout ? "outline" : "default"}>
+              <Link href={`/events/${event.id}/checkin`}>
+                <ArrowDownToLine className="mr-2 size-4" />
+                Start check-in
               </Link>
             </Button>
           ) : null}

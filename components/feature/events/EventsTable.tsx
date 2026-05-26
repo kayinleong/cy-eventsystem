@@ -45,6 +45,7 @@ import {
 
 import { useEventsLive } from "@/lib/hooks/use-events-live";
 import { useUrlTableState } from "@/lib/hooks/use-url-table-state";
+import { deriveEventStatus } from "@/lib/utils/event-status";
 import type { EventDoc, EventStatus } from "@/lib/types/event";
 import type { Session } from "@/lib/types/session";
 import {
@@ -190,11 +191,17 @@ export function EventsTable({
             Status <ArrowUpDown className="ml-2 size-3" />
           </Button>
         ),
-        cell: ({ row }) => (
-          <StatusBadge tone={statusToTone(row.original.status)}>
-            {statusToLabel(row.original.status)}
-          </StatusBadge>
-        ),
+        cell: ({ row }) => {
+          // Derive at read-time so manual Firestore date edits reflect
+          // immediately. Stored status is informational; lifecycle is
+          // date-driven (deriveEventStatus respects explicit "cancelled").
+          const effective = deriveEventStatus(row.original);
+          return (
+            <StatusBadge tone={statusToTone(effective)}>
+              {statusToLabel(effective)}
+            </StatusBadge>
+          );
+        },
       },
     ],
     [],
