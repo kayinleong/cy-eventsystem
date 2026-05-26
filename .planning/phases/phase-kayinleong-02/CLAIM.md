@@ -6,7 +6,7 @@
 - started: 2026-05-25
 - status: in-progress
 - summary: Functionality — wire Firebase Auth + Firestore + 2 Cloud Functions + Storage; replace every mock with real backend; UI surface frozen from Phase 1
-- current plan: 02-10 next (reports views — Wave 10); 02-09 code complete + SUMMARY shipped (Block F: checkin marquee + missing resolution), awaiting E2E + Block F rules audit attestation per `## E2E Smoke + Block F Rules Audit — Plan 02-09` below; 02-08 checkout PASS incl. concurrent invariant + rules audit logged; Cloud Functions removed and inlined into Server Actions per D-02 re-amendment
+- current plan: 02-10 (reports + dashboard count() aggregations — Wave 10, Block G); 02-09 checkin + missing PASS + Block F rules audit logged; event status now derived from dates (commit b23c449); Cloud Functions removed and inlined into Server Actions per D-02 re-amendment
 
 ## What will change
 
