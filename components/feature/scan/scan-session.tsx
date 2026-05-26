@@ -1,24 +1,36 @@
-// Phase 1 scan-session context.
+// Phase 2 scan-session context.
 //
-// CONTEXT.md D-13/D-14/D-15 — owns the in-memory state for a /scan session:
+// Plan 02-08 swap: store.checkout (mock) → commitCheckoutCartAction (Server
+// Action). The useOptimistic + revert path from Phase 1 is preserved unchanged
+// because the Server Action returns the exact CheckoutResult discriminated
+// union shape (CO-06; CONTEXT.md `<specifics>` last bullet).
+//
+// CONTEXT.md D-13/D-14/D-15 (Phase 1) — owns the in-memory state for a /scan
+// session:
 //   - mode (checkout vs checkin) — SCN-01
-//   - selectedEvent (sticky for the session; post-scan event picker per D-15 +
-//     CO-02) — survives across scans, cleared on End session
+//   - selectedEvent (sticky for the session; post-scan event picker per D-15
+//     + CO-02) — survives across scans, cleared on End session
 //   - cart (ephemeral list of scanned items with qty) — CO-03/CO-06
 //
 // Mutators:
-//   - addLine: takes a SKU or item id (camera scan rawValue OR manual entry),
-//     dedups by item, increments qty up to availableQty in checkout mode,
-//     emits sonner success/error toasts per UI-SPEC copy
+//   - addLine: takes a SKU or item id (camera scan rawValue, manual entry, or
+//     Bluetooth keystroke burst — CO-10), dedups by item, increments qty up
+//     to availableQty in checkout mode. Sources from useInventoryLive (P2
+//     Block C live hook) so qty stepper bounds reflect the latest stock
+//     observed via onSnapshot.
 //   - removeLine: drops a cart entry — CO-03
 //   - setQty: clamps via QtyStepper bounds
-//   - commit: dispatches to store.checkout (CO-04) or routes to the
-//     per-event check-in form (CI-02 routing only; Plan 10 wires the form)
+//   - commit: calls commitCheckoutCartAction Server Action (Plan 02-08).
+//     The Server Action atomically validates + decrements in one
+//     runTransaction (CO-04, CO-05). On rejection the cart stays intact and
+//     useOptimistic auto-reverts when the underlying Firestore listener
+//     re-renders with the original availableQty.
 //   - endSession: clears selectedEvent + cart (D-15)
 //
-// Phase 2 swap surface: every method body stays the same shape — only the
-// store.checkout call changes to a Server Action returning the same
-// CheckoutResult contract.
+// Actor lookup REMOVED — the Server Action derives the actor from
+// requireSession() server-side. The Phase 1 mock-actor lookup block (which
+// did `find(u => u.uid === session.uid)` against the mock-user seed) is
+// deleted.
 
 "use client";
 
@@ -32,11 +44,11 @@ import {
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-import { useMockStore } from "@/lib/hooks/use-mock-store";
-import { selectItemBySku } from "@/lib/mock/selectors";
-import { checkout, getSnapshot } from "@/lib/mock/store";
-import { seedUsers } from "@/lib/mock/users";
-import { useCurrentUser } from "@/lib/hooks/use-current-user";
+import {
+  commitCheckoutCartAction,
+  type CheckoutResult,
+} from "@/app/(app)/events/[eventId]/checkout/actions";
+import { useInventoryLive } from "@/lib/hooks/use-inventory-live";
 import type { EventDoc } from "@/lib/types/event";
 
 export type ScanMode = "checkout" | "checkin";
@@ -75,7 +87,6 @@ export function ScanSessionProvider({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const session = useCurrentUser();
   const [mode, setMode] = useState<ScanMode>(initialMode);
   const [selectedEvent, setSelectedEvent] = useState<EventDoc | null>(
     initialEvent,
@@ -83,8 +94,12 @@ export function ScanSessionProvider({
   const [cart, setCart] = useState<ScanCartLine[]>([]);
   const [isCommitting, setIsCommitting] = useState(false);
 
-  // Subscribe to items so QtyStepper bounds reflect the latest stock.
-  const items = useMockStore((s) => s.items);
+  // Live inventory subscription — replaces Phase 1's useMockStore((s) => s.items).
+  // limit: 500 covers v1 scale (D-16 projects 5000+ items eventually, but the
+  // scan flow operates on the active inventory window). The Server Action
+  // re-validates via tx.get so a stale snapshot can't push availableQty
+  // negative; the client copy is for QtyStepper bounds and SKU lookup only.
+  const items = useInventoryLive([], { limit: 500 });
 
   const selectEvent = useCallback(
     (event: EventDoc) => setSelectedEvent(event),
@@ -101,14 +116,13 @@ export function ScanSessionProvider({
       const trimmed = skuOrId.trim();
       if (!trimmed) return { ok: false, reason: "Empty scan." };
 
-      // Use the live snapshot for one-off lookup so we don't depend on the
-      // closed-over `items` slice (which may lag by one render). The selector
-      // is case-insensitive on SKU; fall back to id match for camera scans
-      // that already carry the item id (e.g. an internal QR encoding).
-      const snap = getSnapshot();
+      // SKU lookup is case-insensitive; fall back to id match for camera
+      // scans that already carry the item id (e.g., an internal QR encoding).
+      // Mirrors the Phase 1 selectItemBySku behavior.
+      const lower = trimmed.toLowerCase();
       const item =
-        selectItemBySku(snap, trimmed) ??
-        snap.items.find((i) => i.id === trimmed);
+        items.find((i) => i.sku.toLowerCase() === lower) ??
+        items.find((i) => i.id === trimmed);
 
       if (!item) {
         // UI-SPEC "No scan match" copy verbatim.
@@ -163,7 +177,7 @@ export function ScanSessionProvider({
       }
       return outcome;
     },
-    [mode],
+    [items, mode],
   );
 
   const removeLine = useCallback((itemId: string) => {
@@ -201,27 +215,26 @@ export function ScanSessionProvider({
       toast.error("Cart is empty");
       return;
     }
-    const actor = session
-      ? seedUsers.find((u) => u.uid === session.uid)
-      : undefined;
-    if (!actor) {
-      toast.error("Couldn't commit");
-      return;
-    }
     setIsCommitting(true);
 
     if (mode === "checkout") {
-      const result = checkout({
+      // Phase 2 — Server Action. CheckoutResult shape matches Phase 1 mock
+      // contract so the optimistic-revert path is structurally unchanged.
+      const result: CheckoutResult = await commitCheckoutCartAction({
         eventId: selectedEvent.id,
         lines: cart.map((l) => ({ itemId: l.itemId, qty: l.qty })),
-        actor,
       });
       if (!result.ok) {
         // CO-05 — whole cart fails atomically; surface failed lines so the
-        // user can correct before retrying. Cart stays intact.
+        // user can correct before retrying. Cart stays intact. useOptimistic
+        // (in any consumer) reverts because the underlying Firestore listener
+        // still shows the original availableQty (no successful writes).
         toast.error(result.error, {
           description: result.failedLines
-            ?.map((f) => `${f.itemId}: only ${f.available} left`)
+            ?.map(
+              (f) =>
+                `${f.itemId}: only ${f.available} available, requested ${f.requested}`,
+            )
             .join("; "),
         });
         setIsCommitting(false);
@@ -231,14 +244,18 @@ export function ScanSessionProvider({
         `${cart.length} ${cart.length === 1 ? "item" : "items"} checked out`,
       );
       setCart([]);
+      // Defense-in-depth: revalidatePath has run server-side; refresh the
+      // current segment so the user sees the new outQty + audit feed when
+      // landing on /events/<id>.
       router.push(`/events/${selectedEvent.id}`);
+      router.refresh();
     } else {
       // Phase 1 scope: /scan in checkin mode routes to the per-event check-in
-      // screen (CI-02). Plan 10 wires the full check-in form.
+      // screen (CI-02). Plan 02-09 wires the full check-in form.
       router.push(`/events/${selectedEvent.id}/checkin`);
     }
     setIsCommitting(false);
-  }, [selectedEvent, cart, mode, session, router]);
+  }, [selectedEvent, cart, mode, router]);
 
   const value = useMemo<ScanSessionContextValue>(
     () => ({

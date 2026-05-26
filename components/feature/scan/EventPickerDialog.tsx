@@ -1,4 +1,4 @@
-// Phase 1 post-scan event picker dialog.
+// Phase 2 post-scan event picker dialog.
 //
 // CONTEXT.md D-15 — opens automatically when /scan has no selected event;
 // list is filtered to events the current user can access (EVT-08) and
@@ -6,9 +6,17 @@
 // dialog closes and the parent caller stashes the chosen event in the
 // scan-session sticky header (D-15).
 //
+// Plan 02-08 swap: the mock "accessible events" selector → useEventsLive
+// (Phase 2 onSnapshot hook). EVT-08 access filter happens server-side via
+// the array-contains projection inside useEventsLive (admin sees all, staff
+// sees only events where uid in allowedStaff). CO-02 status filter is
+// applied client-side because useEventsLive's single-status filter doesn't
+// accept an array — we subscribe with no status filter and then filter to
+// planned + active within the 50-row cursor window.
+//
 // Built on shadcn Dialog + Command (cmdk-driven typeahead). The Command
 // renders the events the user has access to; an empty user (signed out
-// edge case) renders an empty list.
+// edge case) or no-events state renders an empty list.
 
 "use client";
 
@@ -27,8 +35,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { useMockStore } from "@/lib/hooks/use-mock-store";
-import { selectAccessibleEvents } from "@/lib/mock/selectors";
+import { useEventsLive } from "@/lib/hooks/use-events-live";
 import { useCurrentUser } from "@/lib/hooks/use-current-user";
 import type { EventDoc } from "@/lib/types/event";
 
@@ -42,15 +49,32 @@ export function EventPickerDialog({
   onSelect: (event: EventDoc) => void;
 }) {
   const session = useCurrentUser();
-  // EVT-08 + CO-02 — filtered to accessible AND planned-or-active.
-  const events = useMockStore((s) =>
+  // useEventsLive requires a Session. While the auth handshake is in flight,
+  // session is null — fall back to an empty list (CommandEmpty renders the
+  // no-results state). We pass a placeholder session shape only when null
+  // so the hook can register a no-op subscription that disposes correctly.
+  const liveEvents = useEventsLive(
+    [],
     session
-      ? selectAccessibleEvents(s, session.uid, session.role, [
-          "planned",
-          "active",
-        ])
-      : [],
+      ? { session, limit: 50 }
+      : {
+          session: {
+            uid: "",
+            email: "",
+            displayName: "",
+            role: "staff",
+            disabled: false,
+          },
+          limit: 50,
+        },
   );
+
+  // CO-02 — only scannable statuses (planned + active). useEventsLive's
+  // status filter accepts a single value; filter client-side within the
+  // 50-row cursor window.
+  const events = session
+    ? liveEvents.filter((e) => e.status === "planned" || e.status === "active")
+    : [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
