@@ -74,12 +74,14 @@ export function ScannerWidget({ paused = false }: { paused?: boolean }) {
     };
   }, []);
 
-  // Going offline mid-session: tear down the camera stream as well so the
-  // library cleanup runs and battery / privacy don't take a hit while the
-  // user can't actually scan anything anyway.
-  useEffect(() => {
-    if (!online && active) setActive(false);
-  }, [online, active]);
+  // Going offline mid-session: the `!online` early return below unmounts the
+  // <Scanner/> JSX subtree, which triggers the library's MediaStream cleanup
+  // automatically. No imperative `setActive(false)` needed — React handles
+  // the teardown via unmount. When the user reconnects, `active` is still
+  // whatever it was before (likely true, since they were scanning), so the
+  // camera resumes seamlessly. The lint rule `react-hooks/set-state-in-effect`
+  // forbids the synchronous setState pattern we'd otherwise use here, and
+  // React's reconciliation gives us the same behavior for free.
 
   if (!online) {
     return (
