@@ -6,7 +6,7 @@
 - started: 2026-05-25
 - status: in-progress
 - summary: Functionality — wire Firebase Auth + Firestore + 2 Cloud Functions + Storage; replace every mock with real backend; UI surface frozen from Phase 1
-- current plan: 02-09 (checkin marquee + missing items resolution — Wave 9, Block F); 02-08 checkout PASS incl. concurrent invariant + rules audit logged; Cloud Functions removed and inlined into Server Actions per D-02 re-amendment
+- current plan: 02-10 next (reports views — Wave 10); 02-09 code complete + SUMMARY shipped (Block F: checkin marquee + missing resolution), awaiting E2E + Block F rules audit attestation per `## E2E Smoke + Block F Rules Audit — Plan 02-09` below; 02-08 checkout PASS incl. concurrent invariant + rules audit logged; Cloud Functions removed and inlined into Server Actions per D-02 re-amendment
 
 ## What will change
 
@@ -209,6 +209,52 @@ User-attested manual Firebase Console Rules Playground audit per D-06 mitigation
 - Verification gates: `npx tsc --noEmit` PASS, `npm run lint` PASS (0 errors, 6 pre-existing `react-hooks/incompatible-library` warnings from TanStack + rhf — identical to plans 02-06/02-07), `npm run build` PASS (28 routes, proxy.ts recognized; /events/[eventId]/checkout dynamic).
 - See `.planning/phases/phase-kayinleong-02/02-08-checkout-action-and-scan-SUMMARY.md` for full details + the CHECKPOINT section covering 6-row smoke + concurrent-invariant test + Block E rules audit (5 cases).
 - **Plan 02-08 gate:** awaiting (A) single-user checkout E2E, (B) CO-05 stock-insufficient toast, (C) useOptimistic revert under network throttling, (D) **concurrent invariant test** (two browsers same event same SKU; one succeeds, the other gets failedLines + cart revert — ROADMAP success criterion #3), (E) EVT-08 notFound for non-members, (F) scanner format smoke (CO-09), (G) Bluetooth keystroke (CO-10 — code review only since ScannerWidget UNTOUCHED), (H) Block E rules audit (5 cases — see SUMMARY.md CHECKPOINT for the table).
+
+### Plan 02-09 (checkin marquee transaction + missing resolution — Wave 9, Block F) — code complete; E2E + Block F rules audit pending (2026-05-26)
+
+- `lib/data/missing.server.ts` (NEW): Admin SDK cursor-paged reader `getMissingPage({cursor, limit, filters: {status, eventId, itemId}})`. Composite indexes from 02-02 cover the dominant query shapes (`missingItems(status, reportedAt desc)` + `missingItems(eventId, reportedAt desc)`). `reportedByName` denormalization with a one-shot `users/{uid}` hydration fallback for docs that predate the denorm. Commit `96e992e`.
+- `lib/hooks/use-missing-live.ts` (NEW): Web SDK `onSnapshot` scoped to 50-row window per D-20. Subscription gated on `onAuthStateChanged` (same pattern as useInventoryLive / useTransactionsLive). Defensive `FirestoreError` console.error. Timestamp → ISO conversion preserves Phase 1 `MissingItemDoc` shape. Commit `96e992e`.
+- `app/(app)/events/[eventId]/checkin/actions.ts` (NEW): `commitCheckinCartAction` — Block F marquee transaction. `requireSession` + EVT-08 access gate (admin OR uid in event.allowedStaff) BEFORE the transaction opens. One `runTransaction` wraps: (1) per-line reads of parent checkout + prior children sum (composite index `transactions(eventId, type, parentTxId, at desc)` from 02-02 covers the query) + inventory snapshot (deduped per SKU); (2) per-line validation with cart-wide `failedLines` collection — `submitted (returnedQty + damagedQty) > remaining` AND CI-04 missing-reason required for short return; structured `BizError("CHECKIN_REJECTED")` throw on any failure; (3) per-SKU inventory writes (`availableQty += returnedQty`, `damagedQty += damagedQty`, `outQty -= movement` where movement = `returnedQty + damagedQty + missingDelta` — NOT full parentQty as Phase 1 mock conflated; lifecycleState bump; `isLowStock` recomputed via `computeIsLowStock` per RESEARCH P11); per-line `checkin` audit row with parentTxId chain (CI-08, AUD-01); per-line `missingItems` doc + `missing` audit tx when missingDelta > 0 (MIS-01, AUD-01). revalidatePath matrix: /events/[id], /events/[id]/checkin, /inventory, /, /reports/out, /reports/missing, /reports/history. Commit `c283ad2`.
+- `lib/schemas/transaction.ts` (MOD): added `CheckinCartSchema` wrapping existing `CheckinLineSchema`. Preserved `damagedQty: number` as separate qty bucket (Phase 1 CI-06 contract) rather than plan's damaged-boolean — matches existing CheckinLineRow Damaged QtyStepper + Phase 1 mock-store mutator API. Commit `c283ad2`.
+- `app/(app)/reports/missing/actions.ts` (NEW): `resolveMissing` Server Action — admin-only via `requireAdmin()`. Single `runTransaction`: reads missingItems doc (rejects `ALREADY_RESOLVED`); reads inventory item (rejects `ITEM_NOT_FOUND`); branches on outcome — `found` → `availableQty += qty`; `writtenOff` → `totalQty -= qty`; both flip `missingItems.status` + record `resolvedAt + resolvedBy` (MIS-02); recompute `isLowStock` atomically (P11); write follow-up `adjustment` audit transaction with notes "Missing resolved: <outcome>" (MIS-04, AUD-01). revalidatePath: /reports/missing, /inventory, /reports/history, /. Commit `4e2452b`.
+- `components/feature/missing/ResolveMissingSheet.tsx` (MOD): swap `store.resolveMissing` (mock) → `resolveMissing` Server Action; `useTransition` for pending state; `router.refresh()` after success; admin-only render preserved; Sheet + RHF + RadioGroup + Zod validation preserved. Removed `seedUsers` + `@/lib/mock/store` imports. Commit `4e2452b`.
+- `app/(app)/events/[eventId]/checkin/page.tsx` (MOD): swap mock-session + mock selectors → real DAL (`requireSession`) + `getEventServer` (EVT-08 server projection + `notFound()` for non-members — anti-enumeration) + `getOpenCheckoutsForEventServer` (Admin SDK + parentTxId-based open-line filter from 02-07). Status filter preserved (any event status accepts check-ins — completed/cancelled events may have stragglers). `generateMetadata` also routes through requireSession + getEventServer so titles don't leak event names. Commit `05f9cf1`.
+- `app/(app)/events/[eventId]/checkin/_components/checkin-form.tsx` (MOD): swap `useMockStore` + Phase 1 open-checkout selector + mock checkin mutator → `useTransactionsLive` for `checkout` + `checkin` + `missing` rows (3 subscriptions, each with composite index from 02-02). Compute `openLines` reactively as `parentQty - sum(child.qty) > 0` (CI-07 partial-return view). `buildLine` defaults `returnedQty` to live `remainingQty` (not the original checked-out qty). Submit calls `commitCheckinCartAction` + surfaces `failedLines` count via toast + `router.refresh()` + navigates back to `/events/[id]` on success. Per-line CI-04 validation gates submit; CheckinLineRow's `checkedOutQty` prop now receives `remainingQty` (reflects partial returns to date). Commit `05f9cf1`.
+- Deviations (auto-fixes):
+  - Rule 3 — `damagedQty` as qty bucket vs plan's damaged-boolean: kept Phase 1 contract (CheckinLineSchema unchanged, CI-06 still satisfied independently).
+  - Rule 1 — `outQty` decrement by movement (not full parentQty): plan snippet had `newOut = item.outQty - checkedOutQty` which conflated partial check-ins. Server Action mirrors Phase 1 mock-store semantics (`outQty -= returnedQty + damagedQty + missingDelta`).
+  - Rule 2 — Prior-children sum inside the transaction (CI-07 correctness): plan snippet had no read, which would have allowed over-return via concurrent partials. Server Action queries `transactions(eventId, type, parentTxId)` for both `checkin` and `missing` rows inside the runTransaction.
+  - Rule 3 — Doc comment edit in checkin-form.tsx header so `grep -q selectOpenCheckoutsForEvent` returns FAIL on the new file (acceptance criterion).
+- Verification gates: `npx tsc --noEmit` PASS, `npm run lint` PASS (0 errors, 6 pre-existing `react-hooks/incompatible-library` warnings from TanStack + rhf — identical to plans 02-06/02-07/02-08), `npm run build` PASS (28 routes, proxy.ts recognized).
+- Architecture preserved: no `functions/` directory (stays deleted), `firestore.rules` / `firestore.indexes.json` / `storage.rules` / `firebase.json` / `lib/firebase/admin.ts` / `lib/firebase/client.ts` / `lib/auth/dal.ts` / `proxy.ts` UNTOUCHED. `lib/mock/*` shim files still present (deletion deferred to 02-11).
+- See `.planning/phases/phase-kayinleong-02/02-09-checkin-action-and-missing-SUMMARY.md` for full details + deviation register + checkpoint instructions.
+- **Plan 02-09 gate:** awaiting E2E smoke (smokes A–G) + Block F rules audit (5 cases) per SUMMARY.md CHECKPOINT section — populated below.
+
+## E2E Smoke + Block F Rules Audit — Plan 02-09 (awaiting attestation)
+
+To advance to plan 02-10, the user runs the following sequence and attests results here.
+
+### Smoke (7 rows)
+
+| # | Scenario | Expected | Result |
+|---|----------|----------|--------|
+| A | Pre-req: open checkout exists (qty 5). Visit /events/<id>/checkin → returnedQty=5, damagedQty=0, no reason → submit. | Toast "1 line checked in"; inventory.availableQty +5, outQty -5, isLowStock recomputed, lifecycleState='available' if all back; transactions has new `checkin` row with parentTxId set. | pending |
+| B | Open checkout of 5 → check-in returnedQty=0, damagedQty=5, no reason → submit. | inventory.availableQty unchanged; damagedQty +5; outQty -5; lifecycleState='damaged' if no available remains. | pending |
+| C | Open checkout of 5 → returnedQty=3, damagedQty=0, missingReason="Lost" → submit. | inventory.availableQty +3, outQty -5; missingItems doc qty=2 reason=Lost status=open; transactions has 1 new `checkin` (qty 3) + 1 new `missing` (qty 2), both with parentTxId. | pending |
+| D | CI-07 semantic verify: try returnedQty=3, damagedQty=0, no reason on a remaining=5 line → submit. | REJECTED via CI-04 ("Missing reason required for any short return"); cart stays open for retry. (Documented semantic — see SUMMARY "Phase 1 → Phase 2 semantic delta (CI-07)".) | pending |
+| E | From smoke C's missing doc, admin /reports/missing (or via row's Resolve sheet) → Found → confirm. | inventory.availableQty +2; missingItems.status='found' + resolvedAt + resolvedBy; transactions has new `adjustment` row notes "Missing resolved: found". | pending |
+| F | Repeat smoke C; resolve → Write off → confirm. | inventory.totalQty -2 (NOT availableQty); missingItems.status='writtenOff'; transactions has new `adjustment` row notes "Missing resolved: writtenOff". | pending |
+| G | EVT-08 access: as staff NOT in event.allowedStaff, visit /events/<id>/checkin. | notFound() (404) — same path as missing event (anti-enumeration). | pending |
+
+### Block F Rules Audit (5 cases)
+
+| # | Path | Auth | Op | Expected | Result |
+|---|------|------|-----|----------|--------|
+| 1 | missingItems/<id> | Signed-in staff | get | ALLOW | pending |
+| 2 | missingItems/<id> | Web SDK client | create | DENY (server-only writes) | pending |
+| 3 | missingItems/<id> | Web SDK client (admin) | update with `{status: 'resolved'}` | DENY (server-only — admin must use Server Action) | pending |
+| 4 | transactions/<id> | Web SDK admin | create | DENY (server-only per AUD-04/INT-03) | pending |
+| 5 | transactions/<id> | Web SDK admin | update with `{type: 'mutated'}` | DENY (immutable per AUD-04) | pending |
 
 ## E2E Smoke + Block D Rules Audit — Plan 02-07 (awaiting attestation)
 
