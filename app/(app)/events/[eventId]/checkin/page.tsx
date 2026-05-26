@@ -1,59 +1,48 @@
-// Phase 1 — /events/[eventId]/checkin route.
+// Phase 2 — /events/[eventId]/checkin route.
 //
 // REQUIREMENTS:
 //   - CI-01 — From an event detail page, an authorized user can open a
 //     check-in screen pre-populated with the event's open check-out lines.
 //   - CI-03 — For each open line, returnedQty defaults to the originally
-//     checked-out qty (set in the Client form's buildLine helper).
-//   - CI-04 — When returnedQty + damagedQty < checkedOutQty, the user MUST
-//     pick a missingReason (enforced inline in CheckinLineRow and at submit
-//     time in CheckinForm).
-//   - CI-05 — Returned-qty flows back into availableQty atomically (inside
-//     store.checkin — called from the Client form's submit).
-//   - CI-06 — Damaged-qty goes into the damaged lifecycle bucket on the
-//     item, not back into available (handled inside store.checkin).
-//   - CI-07 — Partial check-ins supported: after submit, lines that were
-//     committed drop out; remaining lines stay open across visits because
-//     selectOpenCheckoutsForEvent re-reads the latest snapshot every render.
-//   - CI-08 — Each new check-in transaction records parentTxId pointing at
-//     its originating check-out (set inside store.checkin).
-//   - MIS-01 — Missing delta > 0 with reason set → store.checkin creates a
-//     MissingItemDoc record with the reason + parentCheckinTxId link.
-//   - EVT-08 — Access gate: admin OR uid in event.allowedStaff (same shape
-//     as /events/[eventId]/checkout per Plan 09).
-//   - NFR-05 — Page renders without console errors in next dev.
+//     checked-out qty (or its remaining after CI-07 partial returns).
+//   - CI-04 — When returnedQty + damagedQty < remaining, the user MUST
+//     pick a missingReason (enforced inline in CheckinLineRow and at
+//     submit time in CheckinForm; final guard in the Server Action).
+//   - CI-05/CI-06/CI-08 — wired in commitCheckinCartAction (Plan 02-09).
+//   - CI-07 — Partial check-ins supported: after submit, the form
+//     re-reads via useTransactionsLive and shows the new "remaining"
+//     for each parent checkout.
+//   - MIS-01 — Missing delta with reason creates a MissingItemDoc (server
+//     side, inside the same transaction).
+//   - EVT-08 — Access gate: admin OR uid in event.allowedStaff. Server-side
+//     gate via getEventServer + notFound() for anti-enumeration (same
+//     404 path as the checkout page).
+//   - NFR-05 — Page renders without console errors.
 //
-// Architecture:
-//   - Server Component shell mirrors /events/[eventId]/checkout/page.tsx
-//     (the Plan 09 server-shell + client-island template) — requireSession +
-//     async params + selectEventById + notFound + EVT-08 redirect.
-//   - Reads open checkouts at request time; if there are none, renders an
-//     EmptyState ("Nothing to check in") so the Client form never has to
-//     handle the empty case. After a partial check-in, the user is redirected
-//     back to the event detail page; re-navigating to /checkin will show
-//     remaining open lines (or the empty state if all are now closed).
-//   - The Client form is colocated at _components/checkin-form.tsx and
-//     manages its own state — no rhf because the shape is driven by the
-//     dynamic store snapshot, not a static schema.
+// Phase 2 changes vs Phase 1:
+//   - requireSession comes from @/lib/auth/dal (not mock-session).
+//   - Event read uses getEventServer (EVT-08 server-side projection;
+//     null for non-members → notFound() for anti-enumeration).
+//   - Open checkouts come from getOpenCheckoutsForEventServer (Admin
+//     SDK + parentTxId-based filter from Plan 02-07).
+//   - The CheckinForm consumes these as initial-seed props; live
+//     updates flow via useTransactionsLive on the client.
 //
 // Status-actionable note: unlike /checkout (which rejects completed +
-// cancelled events), /checkin accepts any event status. A completed event
-// might still have stragglers to reconcile; a cancelled event might have
-// open checkouts that need to come back. The EmptyState handles the "no
-// open checkouts" case (e.g., planned events that haven't checked out yet,
-// or already-fully-reconciled events).
+// cancelled events), /checkin accepts any event status — a completed
+// event might still have stragglers; a cancelled event might have
+// pending returns to reconcile (post-cancel cleanup).
 
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, PackageOpen } from "lucide-react";
 
-import { requireSession } from "@/lib/auth/mock-session";
-import { getSnapshot } from "@/lib/mock/store";
+import { requireSession } from "@/lib/auth/dal";
 import {
-  selectEventById,
-  selectOpenCheckoutsForEvent,
-} from "@/lib/mock/selectors";
+  getEventServer,
+  getOpenCheckoutsForEventServer,
+} from "@/lib/data/events.server";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -64,30 +53,25 @@ type RouteProps = { params: Promise<{ eventId: string }> };
 export async function generateMetadata({
   params,
 }: RouteProps): Promise<Metadata> {
+  const session = await requireSession();
   const { eventId } = await params;
-  const ev = selectEventById(getSnapshot(), eventId);
-  return { title: ev ? `Check in · ${ev.name}` : "Check in" };
+  const event = await getEventServer(eventId, session);
+  return { title: event ? `Check in · ${event.name}` : "Check in" };
 }
 
 export default async function CheckinPage({ params }: RouteProps) {
   const session = await requireSession();
   const { eventId } = await params;
-  const event = selectEventById(getSnapshot(), eventId);
+
+  // EVT-08 — getEventServer returns null for both missing AND
+  // non-accessible events (anti-enumeration; same 404 path).
+  const event = await getEventServer(eventId, session);
   if (!event) notFound();
 
-  // EVT-08 — admin sees all events; staff must be in allowedStaff
-  // (= teamLeads ∪ backupTeams ∪ admins).
-  if (
-    session.role !== "admin" &&
-    !event.allowedStaff.includes(session.uid)
-  ) {
-    redirect("/unauthorized");
-  }
-
-  // Read open checkouts at request time. The Client form re-reads via
-  // useMockStore so newly-committed lines drop out of the displayed list
-  // without a page refresh.
-  const openTxs = selectOpenCheckoutsForEvent(getSnapshot(), eventId);
+  // SSR seed: initial open checkouts via Admin SDK. The Client form
+  // re-reads via useTransactionsLive so newly-committed lines drop out
+  // of the displayed list (CI-07 partial check-in story).
+  const initialOpenTxs = await getOpenCheckoutsForEventServer(eventId);
 
   return (
     <div className="space-y-4">
@@ -100,7 +84,7 @@ export default async function CheckinPage({ params }: RouteProps) {
         title={`Check in · ${event.name}`}
         description="Mark returned, damaged, or missing for each item."
       />
-      {openTxs.length === 0 ? (
+      {initialOpenTxs.length === 0 ? (
         <EmptyState
           icon={PackageOpen}
           heading="Nothing to check in"
@@ -112,7 +96,7 @@ export default async function CheckinPage({ params }: RouteProps) {
           }
         />
       ) : (
-        <CheckinForm eventId={eventId} initialOpenTxs={openTxs} />
+        <CheckinForm eventId={eventId} initialOpenTxs={initialOpenTxs} />
       )}
     </div>
   );

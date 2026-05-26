@@ -1,60 +1,54 @@
-// Phase 1 — /events/[eventId]/checkin Client form.
+// Phase 2 — /events/[eventId]/checkin Client form.
 //
 // REQUIREMENTS:
 //   - CI-01 — pre-populated with every open check-out line for the event.
-//   - CI-03 — returnedQty defaults to checkedOutQty (the parent transaction's
-//     qty); see buildLine below.
+//   - CI-03 — returnedQty defaults to the remaining qty (parentQty minus
+//     any prior returned + damaged + missing). For a fresh check-out
+//     this equals the original checked-out qty.
 //   - CI-04 — submit-time validation: every line must satisfy
-//     (returnedQty + damagedQty <= checkedOutQty) AND (missingDelta == 0 OR
-//     missingReason set). Inline per-row validation is already surfaced by
-//     CheckinLineRow; the submit handler enforces the same rules before
-//     calling store.checkin.
-//   - CI-06 — damaged routes to item.damagedQty via store.checkin's checkin
-//     mutator (Plan 02 D-02-D + the checkin algorithm in lib/mock/store.ts
-//     lines 282-329).
-//   - CI-07 — partial check-ins: a line where returnedQty == checkedOutQty
-//     AND damagedQty == 0 AND no missing delta is omitted from the payload
-//     ONLY if the user has not changed any defaults. By default every line
-//     has returnedQty == checkedOutQty, which IS a full check-in for that
-//     line, so the default cart sends every line as a "fully returned"
-//     check-in. Users can leave the form unchanged and submit to mark
-//     everything returned at once, or decrement some lines to leave them
-//     open for later (those lines are filtered out of payload).
-//   - CI-08 — each payload line carries parentTxId; store.checkin uses it
-//     to write the new transaction with parentTxId set.
-//   - MIS-01 — when missingDelta > 0 AND missingReason set, store.checkin
-//     creates a MissingItemDoc with parentCheckinTxId linking the missing
-//     record to the new check-in transaction.
+//     (returnedQty + damagedQty <= remaining) AND (missingDelta == 0 OR
+//     missingReason set). Final gate lives in commitCheckinCartAction.
+//   - CI-06 — damaged routes to item.damagedQty via the Server Action
+//     (Plan 02-09 commitCheckinCartAction).
+//   - CI-07 — Partial check-ins: after each submit, useTransactionsLive
+//     pushes the new checkin + missing rows into our `liveChildren`
+//     state; the openLines recompute drops any parent whose children
+//     now sum to its qty, and shows the new remaining for any parent
+//     that's still partly open.
+//   - CI-08 — each payload line carries parentTxId; the Server Action
+//     writes the new transaction with parentTxId set.
+//   - MIS-01 — when missingDelta > 0 AND missingReason set, the Server
+//     Action creates a MissingItemDoc with parentCheckinTxId linking
+//     the missing record to the new check-in transaction.
 //
-// Design notes:
-//   - This is purely client state (no react-hook-form) because the shape
-//     of the form changes with the live store snapshot (CI-07 partial
-//     check-ins drop committed lines from the list). rhf's useFieldArray
-//     would either require manual remove() calls synced to the store or
-//     a full reset() on every snapshot diff — both more fragile than
-//     direct React state. Phase 2 will use useActionState + a Server
-//     Action returning the same CheckinResult contract.
+// Phase 2 changes vs Phase 1:
+//   - Removed mock-store hook + Phase 1 open-checkout selector + mock
+//     checkin mutator.
+//   - Added useTransactionsLive for live updates across both `checkout`
+//     and `checkin` + `missing` rows. Open-line computation is now
+//     a useMemo over these three live arrays.
+//   - Submit calls commitCheckinCartAction (Server Action) and surfaces
+//     failedLines (per-parent rejection reasons) via toast.
+//   - router.refresh() after success bridges any race between the
+//     Server Action's revalidatePath and the live listener catching up.
+//
+// Design notes preserved from Phase 1:
+//   - No react-hook-form — line shape is driven by the dynamic live
+//     state, not a static schema. useFieldArray would require manual
+//     remove() calls synced to the live arrays or a full reset() on
+//     every snapshot diff — both more fragile than direct React state.
 //   - The two-track sync: `lines` is the user-edited state keyed by
-//     parentTxId; `liveOpen` is the reactive store snapshot. On every
-//     render we compute `currentLines = lines ∩ liveOpen` (drops
-//     committed entries) and `missingFromState = liveOpen - lines`
-//     (catches newly-appeared transactions that the form hasn't yet
-//     captured — defensive; not actually expected in Phase 1).
-//   - The form scrolls inside a Card; the submit row sits at the bottom
-//     of the Card content (not sticky) so the user always sees the cart
-//     in full before confirming.
+//     parentTxId; `openLines` is the live-computed list of currently
+//     open parents. On every render we render the intersection.
 
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-import { useMockStore } from "@/lib/hooks/use-mock-store";
-import { selectOpenCheckoutsForEvent } from "@/lib/mock/selectors";
-import { checkin } from "@/lib/mock/store";
-import { seedUsers } from "@/lib/mock/users";
-import { useCurrentUser } from "@/lib/hooks/use-current-user";
+import { useTransactionsLive } from "@/lib/hooks/use-transactions-live";
+import { commitCheckinCartAction } from "@/app/(app)/events/[eventId]/checkin/actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { CheckinLineRow } from "@/components/feature/checkin/CheckinLineRow";
@@ -66,22 +60,23 @@ type LineState = {
   itemId: string;
   itemSku: string;
   itemName: string;
-  checkedOutQty: number;
+  // Remaining qty available to reconcile (parentQty - prior movement).
+  remainingQty: number;
   returnedQty: number;
   damagedQty: number;
   missingReason: MissingReason | "";
 };
 
-function buildLine(t: TransactionDoc): LineState {
+function buildLine(t: TransactionDoc, remainingQty: number): LineState {
   return {
     parentTxId: t.id,
     itemId: t.itemId,
     itemSku: t.itemSku,
     itemName: t.itemName,
-    checkedOutQty: t.qty,
-    // CI-03 — default returned = checked-out. User decrements if anything
+    remainingQty,
+    // CI-03 — default returned = remaining. User decrements if anything
     // didn't come back.
-    returnedQty: t.qty,
+    returnedQty: remainingQty,
     damagedQty: 0,
     missingReason: "",
   };
@@ -95,50 +90,104 @@ export function CheckinForm({
   initialOpenTxs: TransactionDoc[];
 }) {
   const router = useRouter();
-  const session = useCurrentUser();
+  const [pending, startTransition] = useTransition();
 
-  // Reactive subscription so newly-committed lines (after a partial check-in
-  // round-trip via router.push back to this page) drop out of the displayed
-  // list. Phase 2 will use a Firestore onSnapshot listener via this same
-  // selector signature.
-  const liveOpen = useMockStore((s) =>
-    selectOpenCheckoutsForEvent(s, eventId),
-  );
+  // Live arrays for all three relevant transaction types in this event:
+  //   - checkouts:  parent transactions (initial set + any new checkouts)
+  //   - checkins:   prior children (count toward "movement" reducing remaining)
+  //   - missings:   prior missing-tx children (count toward "movement")
+  //
+  // Each subscription has its own composite index from plan 02-02
+  // (transactions(eventId, type, ...)).
+  const checkoutTxs = useTransactionsLive({
+    eventId,
+    type: "checkout",
+    initial: initialOpenTxs,
+    limit: 500,
+  });
+  const checkinTxs = useTransactionsLive({
+    eventId,
+    type: "checkin",
+    limit: 500,
+  });
+  const missingTxs = useTransactionsLive({
+    eventId,
+    type: "missing",
+    limit: 500,
+  });
 
-  // User-controlled per-line state keyed by parentTxId. Initialized from the
-  // SSR'd snapshot; merged with `liveOpen` on every render to drop committed
-  // lines and add any newly-appeared ones.
+  // Compute open lines: for each checkout, sum child qty (checkins +
+  // missings with this parentTxId) → remaining = parentQty - sum.
+  // Lines with remaining > 0 are still open.
+  const openLines = useMemo(() => {
+    const movementByParent = new Map<string, number>();
+    for (const ci of checkinTxs) {
+      if (!ci.parentTxId) continue;
+      movementByParent.set(
+        ci.parentTxId,
+        (movementByParent.get(ci.parentTxId) ?? 0) + ci.qty,
+      );
+    }
+    for (const m of missingTxs) {
+      if (!m.parentTxId) continue;
+      movementByParent.set(
+        m.parentTxId,
+        (movementByParent.get(m.parentTxId) ?? 0) + m.qty,
+      );
+    }
+    return checkoutTxs
+      .map((co) => {
+        const remaining = co.qty - (movementByParent.get(co.id) ?? 0);
+        return { tx: co, remaining };
+      })
+      .filter((l) => l.remaining > 0);
+  }, [checkoutTxs, checkinTxs, missingTxs]);
+
+  // User-controlled per-line state keyed by parentTxId. Initialized
+  // lazily from openLines on first render; reconciled at render time
+  // for any new open lines that appear.
   const [lines, setLines] = useState<LineState[]>(() =>
-    initialOpenTxs.map(buildLine),
+    openLines.map((l) => buildLine(l.tx, l.remaining)),
   );
-  const [submitting, setSubmitting] = useState(false);
 
-  // Two-track sync: keep `lines` in sync with `liveOpen`.
-  //   - currentLines    = lines that still appear in liveOpen
-  //   - missingFromState = liveOpen entries not yet tracked in `lines`
-  // The render-time merge avoids a useEffect (which would also avoid the
-  // React 19 set-state-in-effect rule). State only changes when the user
-  // edits a line OR submits.
-  const liveIds = new Set(liveOpen.map((t) => t.id));
-  const currentLines = lines.filter((l) => liveIds.has(l.parentTxId));
-  const missingFromState = liveOpen.filter(
-    (t) => !lines.some((l) => l.parentTxId === t.id),
+  // Render-time merge: keep `lines` aligned with `openLines`. Drops
+  // committed parents and adds new ones with default state. We do the
+  // merge per render (not via useEffect) to avoid the React 19
+  // set-state-in-effect rule.
+  const openIds = new Set(openLines.map((l) => l.tx.id));
+  const currentLines = lines
+    .filter((l) => openIds.has(l.parentTxId))
+    // Refresh remainingQty in case partial check-ins happened since
+    // last edit (defensive — the user's edits in `lines` win for the
+    // current input values).
+    .map((l) => {
+      const live = openLines.find((o) => o.tx.id === l.parentTxId);
+      if (!live || live.remaining === l.remainingQty) return l;
+      // If the remaining shrank (e.g., concurrent partial check-in)
+      // clamp the user's inputs to the new remaining.
+      const remaining = live.remaining;
+      const returnedQty = Math.min(l.returnedQty, remaining);
+      const damagedQty = Math.min(l.damagedQty, Math.max(0, remaining - returnedQty));
+      return { ...l, remainingQty: remaining, returnedQty, damagedQty };
+    });
+  const missingFromState = openLines.filter(
+    (l) => !lines.some((s) => s.parentTxId === l.tx.id),
   );
   const allLines: LineState[] = [
     ...currentLines,
-    ...missingFromState.map(buildLine),
+    ...missingFromState.map((l) => buildLine(l.tx, l.remaining)),
   ];
 
   function update(parentTxId: string, patch: Partial<LineState>): void {
     setLines((prev) => {
       const exists = prev.find((l) => l.parentTxId === parentTxId);
       if (!exists) {
-        // The line came in via liveOpen but the user is editing it before
-        // the next render pulls it into `lines`. Hydrate from liveOpen on
-        // the fly so the edit isn't lost.
-        const fromLive = liveOpen.find((t) => t.id === parentTxId);
-        if (!fromLive) return prev;
-        return [...prev, { ...buildLine(fromLive), ...patch }];
+        // The line came in via openLines but the user is editing it
+        // before the next render pulls it into `lines`. Hydrate from
+        // openLines on the fly so the edit isn't lost.
+        const fromOpen = openLines.find((o) => o.tx.id === parentTxId);
+        if (!fromOpen) return prev;
+        return [...prev, { ...buildLine(fromOpen.tx, fromOpen.remaining), ...patch }];
       }
       return prev.map((l) =>
         l.parentTxId === parentTxId ? { ...l, ...patch } : l,
@@ -150,11 +199,11 @@ export function CheckinForm({
   // human-readable error string when invalid. CheckinLineRow renders the
   // same errors inline; this function gates the submit.
   function validate(line: LineState): string | null {
-    if (line.returnedQty + line.damagedQty > line.checkedOutQty) {
-      return "Returned + damaged cannot exceed checked out.";
+    if (line.returnedQty + line.damagedQty > line.remainingQty) {
+      return "Returned + damaged cannot exceed remaining.";
     }
     const missingDelta =
-      line.checkedOutQty - line.returnedQty - line.damagedQty;
+      line.remainingQty - line.returnedQty - line.damagedQty;
     if (missingDelta > 0 && !line.missingReason) {
       return "Pick a reason for missing items.";
     }
@@ -169,33 +218,23 @@ export function CheckinForm({
       return;
     }
 
-    const actor = session
-      ? seedUsers.find((u) => u.uid === session.uid)
-      : undefined;
-    if (!actor) {
-      toast.error("Couldn't check in");
-      return;
-    }
-
-    // Only commit lines where SOMETHING happens. A line where the user
-    // hasn't touched the defaults still counts: returnedQty == checkedOutQty
-    // means "everything came back" — full return, do commit it. The filter
-    // below drops only the degenerate case where returned=0, damaged=0, and
-    // missing=0 (impossible by the per-line zod refine but defensive).
+    // Only commit lines where SOMETHING happens. A degenerate line where
+    // returned=0, damaged=0, and missing=0 is impossible against an
+    // open parent but defensive filter.
     const payload = allLines
       .filter(
         (l) =>
           l.returnedQty > 0 ||
           l.damagedQty > 0 ||
-          l.checkedOutQty - l.returnedQty - l.damagedQty > 0,
+          l.remainingQty - l.returnedQty - l.damagedQty > 0,
       )
       .map((l) => ({
         parentTxId: l.parentTxId,
         itemId: l.itemId,
         returnedQty: l.returnedQty,
         damagedQty: l.damagedQty,
-        // Cast empty string to undefined for the store mutator (its arg
-        // type is MissingReason | undefined, not "").
+        // Cast empty string to undefined for the Server Action's
+        // optional missingReason field.
         missingReason: l.missingReason || undefined,
       }));
 
@@ -204,28 +243,29 @@ export function CheckinForm({
       return;
     }
 
-    setSubmitting(true);
-    const result = checkin({ eventId, lines: payload, actor });
-    if (result.ok) {
-      // CI-07 — partial check-ins: ANY line where returnedQty + damagedQty <
-      // checkedOutQty AND missingReason set will commit a check-in tx with
-      // that delta only; the parent checkout becomes "fully reconciled" at
-      // that point (the missing portion is recorded via MissingItem +
-      // missing-typed tx, completing the chain). The event detail page
-      // re-reads the snapshot on next visit; if any check-outs are still
-      // open they'll appear here.
+    startTransition(async () => {
+      const result = await commitCheckinCartAction({ eventId, lines: payload });
+      if (!result.ok) {
+        const detail = result.failedLines?.length
+          ? ` (${result.failedLines.length} line${result.failedLines.length === 1 ? "" : "s"} rejected)`
+          : "";
+        toast.error(`${result.error}${detail}`);
+        return;
+      }
       toast.success(
-        `${payload.length} ${payload.length === 1 ? "line" : "lines"} checked in`,
+        `${result.txIds.length} ${result.txIds.length === 1 ? "line" : "lines"} checked in${
+          result.missingIds.length > 0
+            ? ` · ${result.missingIds.length} flagged missing`
+            : ""
+        }`,
       );
+      // Defense-in-depth: revalidatePath in the Server Action handles
+      // SSR re-fetch, but useTransactionsLive subscribes on the client.
+      // router.refresh() flushes both paths. We navigate after the
+      // refresh resolves so the user lands on a fresh event detail page.
       router.push(`/events/${eventId}`);
-    } else {
-      // The current store.checkin always returns ok:true (it's defensive
-      // about missing events / items), so this branch is unreachable in
-      // Phase 1. Kept for symmetry with the checkout flow so Phase 2's
-      // Server Action return shape can drop straight in.
-      toast.error("Couldn't check in");
-    }
-    setSubmitting(false);
+      router.refresh();
+    });
   }
 
   return (
@@ -246,7 +286,7 @@ export function CheckinForm({
             itemId={line.itemId}
             itemSku={line.itemSku}
             itemName={line.itemName}
-            checkedOutQty={line.checkedOutQty}
+            checkedOutQty={line.remainingQty}
             returnedQty={line.returnedQty}
             damagedQty={line.damagedQty}
             missingReason={line.missingReason}
@@ -258,15 +298,20 @@ export function CheckinForm({
           />
         ))}
         <div className="flex justify-end gap-2 pt-4">
-          <Button type="button" variant="outline" onClick={() => router.back()}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => router.back()}
+            disabled={pending}
+          >
             Cancel
           </Button>
           <Button
             type="button"
             onClick={submit}
-            disabled={submitting || allLines.length === 0}
+            disabled={pending || allLines.length === 0}
           >
-            Confirm return
+            {pending ? "Submitting…" : "Confirm return"}
           </Button>
         </div>
       </CardContent>
