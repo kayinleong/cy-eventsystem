@@ -35,6 +35,10 @@ type NavItem = {
   label: string;
   icon: LucideIcon;
   roles: ReadonlyArray<UserRole>;
+  // Optional broader prefix for active-state matching when the href points
+  // at a sub-route. E.g. Reports' href is /reports/stock (the default tab)
+  // but the item should highlight on any /reports/* page.
+  matchPrefix?: string;
 };
 
 const items: ReadonlyArray<NavItem> = [
@@ -42,14 +46,17 @@ const items: ReadonlyArray<NavItem> = [
   { href: "/inventory",     label: "Inventory", icon: Package,         roles: ["admin", "staff"] },
   { href: "/scan",          label: "Scan",      icon: ScanLine,        roles: ["admin", "staff"] },
   { href: "/events",        label: "Events",    icon: Calendar,        roles: ["admin", "staff"] },
-  { href: "/reports/stock", label: "Reports",   icon: BarChart3,       roles: ["admin", "staff"] },
+  { href: "/reports/stock", label: "Reports",   icon: BarChart3,       roles: ["admin", "staff"], matchPrefix: "/reports" },
   { href: "/users",         label: "Users",     icon: Users,           roles: ["admin"] }, // AUTH-10
   { href: "/settings",      label: "Settings",  icon: Settings,        roles: ["admin", "staff"] },
 ];
 
-function isActive(pathname: string, href: string): boolean {
-  if (href === "/") return pathname === "/";
-  return pathname === href || pathname.startsWith(`${href}/`);
+function isActive(pathname: string, item: NavItem): boolean {
+  if (item.href === "/") return pathname === "/";
+  if (item.matchPrefix) {
+    return pathname === item.matchPrefix || pathname.startsWith(`${item.matchPrefix}/`);
+  }
+  return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
 export function AppSidebar({ role }: { role: UserRole }) {
@@ -65,7 +72,7 @@ export function AppSidebar({ role }: { role: UserRole }) {
         {items
           .filter((i) => i.roles.includes(role))
           .map((item) => {
-            const active = isActive(pathname, item.href);
+            const active = isActive(pathname, item);
             const Icon = item.icon;
             return (
               <Link
