@@ -28,6 +28,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/lib/types/user";
+import { LowStockBadge } from "@/components/layout/Nav";
 
 type NavItem = {
   href: string;
@@ -80,6 +81,8 @@ export function AppSidebar({ role }: { role: UserRole }) {
               >
                 <Icon className="size-4" />
                 {item.label}
+                {/* RP-03 — surface low-stock badge next to Reports nav item. */}
+                {item.href === "/reports/stock" ? <LowStockBadge /> : null}
               </Link>
             );
           })}
