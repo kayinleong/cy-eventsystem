@@ -95,9 +95,10 @@ export function EventsTable({
     ["status"],
   );
 
-  // EVT-03 default = "active" — match the SSR seed so the listener doesn't
-  // briefly disagree with the server-rendered first paint.
-  const statusFilter = url.filters.status ?? "active";
+  // Default to all statuses — matches the SSR seed in page.tsx so the
+  // listener doesn't briefly disagree with the server-rendered first paint.
+  // EVT-08 access already filters down to events the user can see.
+  const statusFilter = url.filters.status ?? "_all";
   const liveStatus = statusFilter === "_all" ? undefined : statusFilter;
 
   // D-20: page-scoped live data, 50-row window. EVT-08 baked in via session.
@@ -245,9 +246,9 @@ export function EventsTable({
         <Select
           value={statusFilter}
           onValueChange={(v) =>
-            // EVT-03 default = active. The "_all" sentinel clears the filter
-            // explicitly without colliding with the no-value (default) path.
-            setFilter("status", v === "active" ? null : v)
+            // Default = "_all" (no filter). Selecting _all clears the URL
+            // param. Selecting any specific status sets the param.
+            setFilter("status", v === "_all" ? null : v)
           }
         >
           <SelectTrigger className="w-40">

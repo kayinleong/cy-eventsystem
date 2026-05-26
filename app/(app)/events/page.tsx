@@ -47,11 +47,12 @@ export default async function EventsListPage({ searchParams }: RouteProps) {
   const session = await requireSession();
 
   const params = await searchParams; // Next 16 async
-  // EVT-03 default = "active" when no explicit filter; "_all" disables the
-  // status filter entirely so users can browse every status they're allowed
-  // to see.
-  const statusParam = params.status ?? "active";
-  const statusFilter = statusParam === "_all" ? undefined : statusParam;
+  // Default to all statuses — users browse every event they have access to
+  // (gated separately by EVT-08 allowedStaff projection in getEventsPage).
+  // Explicit ?status=<value> narrows; ?status=_all is the same as omitted.
+  const statusParam = params.status;
+  const statusFilter =
+    !statusParam || statusParam === "_all" ? undefined : statusParam;
 
   const { events, nextCursor } = await getEventsPage({
     cursor: params.cursor ?? null,
