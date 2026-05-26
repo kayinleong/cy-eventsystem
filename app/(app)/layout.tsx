@@ -16,6 +16,7 @@
 import { requireSession } from "@/lib/auth/dal";
 import { AppSidebar } from "@/components/feature/shell/AppSidebar";
 import { TopBar } from "@/components/feature/shell/TopBar";
+import { OfflineBanner } from "@/components/layout/OfflineBanner";
 
 export default async function AppLayout({
   children,
@@ -25,13 +26,18 @@ export default async function AppLayout({
   const session = await requireSession();
 
   return (
-    <div className="flex min-h-svh">
-      <AppSidebar role={session.role} />
-      <div className="flex-1 flex flex-col min-w-0">
-        <TopBar session={session} />
-        <main className="flex-1 max-w-350 w-full mx-auto px-4 md:px-6 py-6">
-          {children}
-        </main>
+    <div className="flex min-h-svh flex-col">
+      {/* RES-02 — global offline banner. Renders null when navigator.onLine
+          is true so it has zero visual cost in the steady state. */}
+      <OfflineBanner />
+      <div className="flex flex-1 min-h-0">
+        <AppSidebar role={session.role} />
+        <div className="flex-1 flex flex-col min-w-0">
+          <TopBar session={session} />
+          <main className="flex-1 max-w-350 w-full mx-auto px-4 md:px-6 py-6">
+            {children}
+          </main>
+        </div>
       </div>
     </div>
   );
