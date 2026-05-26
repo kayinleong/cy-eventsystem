@@ -6,7 +6,7 @@
 - started: 2026-05-25
 - status: in-progress
 - summary: Functionality — wire Firebase Auth + Firestore + 2 Cloud Functions + Storage; replace every mock with real backend; UI surface frozen from Phase 1
-- current plan: 02-08 (checkout marquee transaction + scan — Wave 8, Block E); 02-07 smoke approved + rules audit logged; Cloud Functions removed and inlined into Server Actions per D-02 re-amendment
+- current plan: 02-09 (checkin marquee + missing items resolution — Wave 9, Block F); 02-08 checkout PASS incl. concurrent invariant + rules audit logged; Cloud Functions removed and inlined into Server Actions per D-02 re-amendment
 
 ## What will change
 
