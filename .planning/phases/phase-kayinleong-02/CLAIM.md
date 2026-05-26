@@ -6,7 +6,7 @@
 - started: 2026-05-25
 - status: in-progress
 - summary: Functionality — wire Firebase Auth + Firestore + 2 Cloud Functions + Storage; replace every mock with real backend; UI surface frozen from Phase 1
-- current plan: 02-10 (reports + dashboard count() aggregations — Wave 10, Block G) code complete, awaiting E2E + Block G rules audit; 02-09 checkin + missing PASS + Block F rules audit logged; event status now derived from dates (commit b23c449); Cloud Functions removed and inlined into Server Actions per D-02 re-amendment
+- current plan: 02-11 (Server Action audit + lib/mock wholesale wipe — Wave 11, Block H); 02-10 reports + Block G rules audit PASS; reports sub-nav fix (commit 319fa9c) + sidebar matchPrefix fix (d7dcda5); event status derived from dates; Cloud Functions removed and inlined into Server Actions per D-02 re-amendment
 
 ## What will change
 
