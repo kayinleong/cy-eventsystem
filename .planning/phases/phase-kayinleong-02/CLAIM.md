@@ -6,7 +6,7 @@
 - started: 2026-05-25
 - status: in-progress
 - summary: Functionality — wire Firebase Auth + Firestore + 2 Cloud Functions + Storage; replace every mock with real backend; UI surface frozen from Phase 1
-- current plan: 02-14 (final cross-collection rules + index audit — Wave 12) — report committed; awaiting user attestation (deploy + Playground spot-checks + index diff). 02-11/12/13 all PASS incl. Block H offline + PWA smoke + offline-aware error.tsx. 02-15 verification gate opens once 02-14 attested.
+- current plan: 02-15 (Phase 2 verification gate — Wave 13, FINAL); 02-14 final rules + index audit PASS (19 indexes deployed clean, INT-05 reaffirmed via commit 315793a). Phase 2 in homestretch — one plan to go.
 
 ## What will change
 
