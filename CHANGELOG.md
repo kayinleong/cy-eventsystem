@@ -33,6 +33,14 @@ project adheres to semver where applicable.
     audit + single-developer single-production-project topology (D-03).
   - v2 candidate: revisit `@firebase/rules-unit-testing` if the manual audit
     reveals gaps that the per-block playground checks could not catch.
+- **D-06 closure (Phase 2, plan 02-14, `phase-kayinleong-02`): final
+  cross-collection rules + index audit complete.** The 48-row matrix in
+  `.planning/phases/phase-kayinleong-02/rules-audit-final.md` consolidates the
+  per-block audits from plans 02-02 through 02-10 and adds Storage rows for
+  D-13. Rules unit tests remain SKIPPED in v1 as documented above; the audit
+  report fulfills D-06 mitigations (b) + (c). INT-05 ban on Console
+  auto-create links reaffirmed — every index in production is declared in
+  `firestore.indexes.json` and lands via `firebase deploy`.
 
 ### Added
 

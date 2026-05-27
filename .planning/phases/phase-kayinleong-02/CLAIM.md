@@ -6,7 +6,7 @@
 - started: 2026-05-25
 - status: in-progress
 - summary: Functionality — wire Firebase Auth + Firestore + 2 Cloud Functions + Storage; replace every mock with real backend; UI surface frozen from Phase 1
-- current plan: 02-14 (final cross-collection rules + index audit — Wave 12); 02-11/12/13 all PASS incl. Block H offline + PWA smoke + offline-aware error.tsx (commit 06adf05); 02-15 verification gate is the only plan after this.
+- current plan: 02-14 (final cross-collection rules + index audit — Wave 12) — report committed; awaiting user attestation (deploy + Playground spot-checks + index diff). 02-11/12/13 all PASS incl. Block H offline + PWA smoke + offline-aware error.tsx. 02-15 verification gate opens once 02-14 attested.
 
 ## What will change
 
@@ -285,6 +285,15 @@ User-attested manual Firebase Console Rules Playground audit per D-06 mitigation
 - **Threat register:** T-02-13-01 mitigated; T-02-13-02 + T-02-13-03 accepted per the plan threat register.
 - **v2 polish:** PWA icon PNGs (`public/icon-192.png`, `public/icon-512.png`) still need real artwork — Lighthouse PWA installability will warn until they ship.
 - See `.planning/phases/phase-kayinleong-02/02-13-offline-and-pwa-SUMMARY.md`.
+
+### Plan 02-14 (final cross-collection rules + index audit — Wave 12, Block H) — report committed; awaiting user attestation (2026-05-27)
+
+- `.planning/phases/phase-kayinleong-02/rules-audit-final.md` (NEW): 48-row cross-collection audit matrix covering EVERY collection × EVERY CRUD op × EVERY auth context. Sections: 39 Firestore rows (users 9, inventory 9, events 9, transactions 6, missingItems 5, catch-all 1) + 9 Storage rows (items/{id}/photo.jpg 7, catch-all 2) + Index Reconciliation (12 declared indexes documented with purpose) + FAILED_PRECONDITION smoke-walk table (10 pages) + Deploy Confirmation + Sign-off with 4 user attestation checkboxes. Fulfills D-06 mitigations (b)+(c) — manual cross-collection audit + Console Rules Playground evidence substituting for unit tests.
+- `CHANGELOG.md` (MOD): added "D-06 closure" bullet under [Unreleased] / Decisions noting the audit consolidates plans 02-02..02-10 + reaffirms INT-05.
+- **No code changes.** `firestore.rules`, `firestore.indexes.json`, `storage.rules`, `firebase.json`, Server Actions, DAL, UI surface ALL UNTOUCHED per plan must-not-do guards.
+- Storage write rule documented as **intentionally relaxed** in matrix row 42 (commit `96cf12a` from plan 02-06): any signed-in user can write within size + content-type bounds; admin gate enforced upstream in Server Actions via `requireAdmin()`. v2 follow-up: re-tighten once Storage→Firestore cross-service eval lag reproducible.
+- See `.planning/phases/phase-kayinleong-02/02-14-rules-and-index-audit-SUMMARY.md`.
+- **Plan 02-14 gate (CHECKPOINT REACHED — human-verify):** awaiting 4 attestations: (1) `firebase deploy --only firestore,storage --project <project-id>` clean tail pasted into the report, (2) `firebase firestore:indexes --project <project-id>` output + empty diff vs repo, (3) ≥3 random matrix rows spot-checked in Console Rules Playground, (4) 10-page FAILED_PRECONDITION smoke walk with any errors documented (or "none").
 
 ### Plan 02-12 (per-segment error / loading / not-found / unauthorized boundaries — Wave 11, Block H) — complete (2026-05-26)
 
