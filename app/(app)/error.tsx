@@ -19,7 +19,8 @@
 // this component is wrapped in <div>, not a nested <main>. Per Next 16
 // docs: error.js renders INSIDE the same-segment layout's <main>.
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function AppError({
@@ -29,12 +30,51 @@ export default function AppError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // Detect offline so we can render offline-specific copy. Most "page won't
+  // load" errors while offline are network-reach failures from the Server
+  // Component's Admin SDK calls, not application bugs — telling the user
+  // it's a code error when their wifi is off is misleading.
+  const [offline, setOffline] = useState(false);
   useEffect(() => {
-    // Server logs capture full error via Next.js framework; this client log
-    // is for browser-side observability. error.message + digest only —
-    // never log session tokens or Firebase credentials.
+    const update = () =>
+      setOffline(typeof navigator !== "undefined" && !navigator.onLine);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
+
+  useEffect(() => {
     console.error("[app/(app)/error]", error.message, error.digest);
   }, [error]);
+
+  if (offline) {
+    return (
+      <div className="grid place-items-center min-h-[60vh] px-4 py-8">
+        <div className="max-w-md text-center space-y-4">
+          <WifiOff className="mx-auto size-8 text-muted-foreground" />
+          <h1 className="text-2xl font-semibold">You&apos;re offline</h1>
+          <p className="text-muted-foreground">
+            This page needs to fetch fresh data from the server, which isn&apos;t
+            available right now. Reconnect and try again — your previous view
+            stays cached.
+          </p>
+          <div className="flex gap-2 justify-center">
+            <Button onClick={() => reset()}>Try again</Button>
+            <Button
+              variant="outline"
+              onClick={() => window.history.back()}
+            >
+              Go back
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="grid place-items-center min-h-[60vh] px-4 py-8">

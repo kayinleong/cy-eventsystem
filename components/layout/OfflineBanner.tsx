@@ -47,8 +47,8 @@ export function OfflineBanner() {
     >
       <WifiOff className="size-4" />
       <span>
-        Offline — reconnect to scan. Existing data continues to display from
-        cache.
+        Offline — your current view continues from cache. Scanning, commits,
+        and navigating to new pages require reconnecting.
       </span>
     </div>
   );
