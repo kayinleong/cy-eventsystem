@@ -4,9 +4,10 @@
 - session: claude-code
 - branch: main
 - started: 2026-05-25
-- status: in-progress
-- summary: Functionality — wire Firebase Auth + Firestore + 2 Cloud Functions + Storage; replace every mock with real backend; UI surface frozen from Phase 1
-- current plan: 02-15 (Phase 2 verification gate — Wave 13, FINAL); 02-14 final rules + index audit PASS (19 indexes deployed clean, INT-05 reaffirmed via commit 315793a). Phase 2 in homestretch — one plan to go.
+- completed: 2026-05-27
+- status: done
+- summary: Functionality — wired Firebase Auth + Firestore + 2 Cloud Functions (re-amended to inlined Server Actions per D-02) + Storage; replaced every mock with real backend; UI surface frozen from Phase 1 except D-15 photo + D-17 cursor URLs amendments
+- current plan: 02-15 (Phase 2 verification gate — Wave 13, FINAL) — COMPLETE. All 15 plans shipped across 13 waves. All 3 automated gates green. 10-step acceptance demo PASS (per-block evidence trail). Cloud Functions: 0 (inlined). Mock layer: deleted. **Phase 2 — Functionality — COMPLETE 2026-05-27.**
 
 ## What will change
 
@@ -394,6 +395,100 @@ To advance to plan 02-08, the user runs the following sequence and attests resul
 | 7 | events/<new-id> | staff | create | ALLOW (allow create: if isSignedIn — Server Action enforces narrower gate) | pending |
 | 8 | events/<id> | admin | delete | ALLOW (isAdmin) | pending |
 
+## What has changed (final)
+
+- **Block A (02-01..02-03):** Firebase project + Admin/Web SDK clients + DAL (`verifySession`/`requireSession`/`requireAdmin` via `getTokens()` from `next-firebase-auth-edge` + `adminAuth.verifyIdToken(token, true)` for AUTH-09) + `proxy.ts` at repo root + `firestore.rules` + `firestore.indexes.json` (12 indexes initially, grew to 19) + `storage.rules` + `firebase.json` + `.env.example` + `CHANGELOG.md` D-06 entry. Auth pages wired (`/login`, `/forgot-password`, `/set-password` with D-08 auto-sign-in). POC affordances deleted (`PhaseOnePocRoleSwitcher`, `SeedUsersDisclosure`). `scripts/seed-first-admin.ts` CLI (D-05).
+- **Block B (02-04):** Users data layer + 3 Server Actions (`inviteUser` with D-09 Copy-link, `setUserRole`, `disableUser`). Cloud Functions logic re-amended to inlined Server Actions per D-02 (functions/ directory subsequently deleted in 02-07). Last-admin demote guard. AUTH-09 immediate propagation via `revokeRefreshTokens`. All 5 Block A Rules Playground cases user-attested PASS.
+- **Block C (02-05..02-06):** Inventory data layer + 6 Server Actions (`createItem` with SKU-uniqueness, `updateItem`, `retireItem` with PITFALLS C5 stuck-out guard, `adjustItemStock` with WOULD_GO_NEGATIVE, `updateLowStockThreshold`, `markLowStockOrdered`). `isLowStock` denorm field added per RESEARCH P11 (Firestore `where()` can't compare two fields). `ItemPhotoField` component (D-15) with camera + file-picker + client-side resize. Cursor pagination D-17 (Prev/Next, no page-N/M). `useInventoryLive` + `useTransactionsLive` hooks. `AdjustStockDialog` admin-only with required reason. `LowStockThresholdsCard` swapped to Firestore.
+- **Block D (02-07):** Events data layer + 3 Server Actions (`createEvent`, `updateEvent` with EVT-05 canEditEvent gate, `cancelEvent` with EVT-06 atomic reconciliation). EVT-08 access control at 3 layers (server projection via `array-contains` in `getEventsPage`, client filter in `useEventsLive`, Firestore rule `isMember`). `recomputeAllowedStaffForEvent` synchronous writer (inlined Function 2). Event status now derived from dates (commit b23c449 — eliminates stale-status bugs). `OverdueReturnsWidget` uses `useSyncExternalStore` 60s interval (React 19 purity-compliant).
+- **Block E (02-08):** `commitCheckoutCartAction` marquee transaction (one `runTransaction`: parallel reads + cart-wide invariant pass + per-item updates + isLowStock denorm + per-line audit). CO-05 invariant enforced inside transaction (rejects under concurrent races; `STOCK_INSUFFICIENT` → `failedLines` payload for useOptimistic revert). EVT-08 access check + status guard before transaction. P8 dedup: lines aggregated by itemId before validation. **ROADMAP success criterion #3 verified via 2-browser race smoke (user-attested PASS).**
+- **Block F (02-09):** `commitCheckinCartAction` marquee transaction + `resolveMissing` admin action. CI-04 missing-reason gate, CI-06 damaged routing to `damagedQty` bucket, CI-07 partial check-ins via prior-children sum read inside tx (Rule 2 auto-fix — plan snippet missed this), CI-08 parentTxId chain. `missingItems` doc + `missing` audit tx atomically. `resolveMissing` branches `found` → `availableQty +=qty` / `writtenOff` → `totalQty -=qty` + follow-up `adjustment` audit row per MIS-04.
+- **Block G (02-10):** 5 reports + dashboard KPIs via Firestore `count()` aggregations (D-21). `RP-03` nav badge via shared `LowStockBadge` Client Component imported by AppSidebar + MobileNavSheet. `getTransactionsPage` cursor-paged reader. `getDashboardKpis` (totalItems + itemsOut + lowStockCount + activeEvents). Reports sub-nav added (commit 319fa9c) so users can switch between 5 reports without sidebar trips. Sidebar Reports stays highlighted across all `/reports/*` sub-pages.
+- **Block H (02-11..02-14):** Server Action audit (15 actions, 106/106 PASS — see `audit-server-actions.md`). `lib/mock/*` wholesale wipe (10 files, ~93KB) — commit `db2b96b`. App-wide error/loading/not-found + top-level unauthorized boundaries (9 special files, route-specific not-found for inventory + events). OfflineBanner + ScannerWidget offline gate (RES-02) + scan-cart sessionStorage persistence (RES-03) + PWA manifest (RES-04). Final cross-collection Rules Playground audit (`rules-audit-final.md`, 48 rows: 39 Firestore + 9 Storage). Indexes synced (commit 315793a — 19 indexes deployed, INT-05 reaffirmed).
+- **Block I (02-15):** This plan. Automated gates run, regression report assembled, CLAIM.md closed, STATE.md + REQUIREMENTS.md + ROADMAP.md updated.
+
+Total files: ~120 modified, ~25 created, ~10 deleted (`lib/mock/*` wholesale + POC affordances).
+
 ## Verification
 
-(Populated when phase completes — must include Regression Report per global CLAUDE.md.)
+### Automated gates (run 2026-05-27)
+
+- `npx tsc --noEmit`: PASS (exit 0, clean)
+- `npm run lint`: PASS (exit 0; 0 errors + 12 pre-existing `react-hooks/incompatible-library` warnings from TanStack `useReactTable` and react-hook-form `watch()` — library limitations, out-of-scope per scope boundary, tracked since plan 02-06)
+- `npm run build`: PASS (exit 0; 30 routes generated; "Compiled successfully")
+
+### Firebase deploy gates (per per-block attestations in CLAIM.md "## Rules Audit — Block A" and `rules-audit-final.md`)
+
+- `firebase deploy --only firestore:rules,firestore:indexes,storage`: PASS (Block A attestation 2026-05-25; reaffirmed in `rules-audit-final.md` 2026-05-27)
+- `firebase firestore:indexes` reconciliation: PASS (19 indexes, repo vs deployed empty diff per `rules-audit-final.md`)
+- `firebase deploy --only functions`: N/A (functions inlined per re-amended D-02; `functions/` directory deleted in plan 02-07)
+
+### Acceptance demo (10-step ROADMAP success criteria)
+
+The consolidated 10-step demo is mapped to per-block smokes already attested in CLAIM.md per-block "## E2E Smoke + Block X Rules Audit" sections + `rules-audit-final.md`:
+
+1. **Admin sign-in + invite + staff sets password:** PASS (02-03 auth E2E + 02-04 D-09 Copy-link verified; Block A Rules Playground 5/5 user-attested)
+2. **Admin creates item + event + team; staff checks out; stock matches:** PASS (02-06 inventory smoke + 02-07 events smoke + 02-08 checkout smoke all user-attested)
+3. **Concurrent checkouts cannot drive availableQty negative:** PASS (ROADMAP success criterion #3 — 02-08 SUMMARY 2-browser race test user-attested PASS; one cart succeeds, the other gets `failedLines` toast + cart revert)
+4. **Missing items at check-in → /reports/missing → admin resolves → stock affected:** PASS (02-09 SUMMARY 7-row smoke user-attested; both `found` and `writtenOff` outcomes verified)
+5. **Phase 1 UI surface preserved (with D-15 + D-17 amendments):** PASS (Phase 1 shell primitives reused verbatim; only intentional diffs are photo field + cursor URLs)
+6. **~~Firestore rules unit tests~~** — AMENDED per D-06; replaced by manual rules audit chain. PASS (8 manual audits: 1 per block + final cross-collection 48-row matrix in `rules-audit-final.md`)
+7. **`firestore.indexes.json` deploys clean:** PASS (INT-05 reaffirmed; commit 315793a synced repo to deployed state; 19 indexes; no auto-create prompts)
+8. **`npm run build` + `tsc --noEmit` + ESLint pass:** PASS (this plan's automated gates table above)
+9. **PWA + offline UX:** PASS (02-13 SUMMARY user-attested: OfflineBanner + ScannerWidget gate + scan-cart sessionStorage + PWA manifest)
+10. **Segment boundaries (error/loading/not-found):** PASS (02-12 SUMMARY 9 special files + HTML hygiene fix; build passes)
+
+### Regression Report (per global CLAUDE.md)
+
+**What was tested:**
+
+- **Phase 1 UI surface preserved** across /login, /, /inventory, /events, /scan, /reports/*, /users, /settings. Visual chrome, layouts, copy unchanged except 2 explicit amendments:
+  - D-15 photo field on `/inventory/new` + `/inventory/[id]/edit` (NEW).
+  - D-17 cursor URL contract on all list pages (`?page=N` → `?cursor=xxx`; Page-N/M → Prev/Next).
+- **All 15 Server Actions audited** (`audit-server-actions.md`): every action verified for `"use server"` directive, session/admin gate before Admin SDK call, Zod parse, `runTransaction` for stock-changing logic, `revalidatePath` matrix compliance, AUD-01 audit row, discriminated return shape with auth-before-SDK + error wrap. **106/106 checklist items PASS. No FAILs.**
+- **48-row cross-collection rules audit** (`rules-audit-final.md`): every Firestore collection × every CRUD op × every auth context + every Storage path. All rows attested with rule basis. INT-05 reaffirmed.
+- **Concurrent invariant** (ROADMAP success criterion #3): 2-browser race against same SKU; one cart commits, the other rejects with `failedLines` payload; `availableQty` never goes negative.
+- **EVT-08 access control** verified at 3 layers: (a) server projection via `array-contains` in `getEventsPage`/`getEventServer`; (b) client filter in `useEventsLive`; (c) Firestore rule `isMember()`. Non-members get `notFound()` (anti-enumeration) instead of /unauthorized.
+- **AUD-01..AUD-04**: every state-changing action writes a `transactions` doc with `actorUid`, `actorDisplayName` snapshot, `actorRoleAtTimeOfAction` snapshot, `serverTimestamp`. Transactions immutable per rule (`allow update, delete: if false`). AUD-04 reaffirmed via final audit row #34.
+- **INT-01..INT-05** all verified end-to-end. INT-01 transactions wrap every stock-changing action; INT-02 rules enforce `availableQty >= 0` AND `<= totalQty`; INT-03 transactions writes server-only; INT-04 every action calls `verifySession()`; INT-05 indexes versioned in repo + deployed clean.
+
+**What passed:**
+
+- All 3 automated gates (build + tsc + lint).
+- All 10 acceptance demo steps (with criterion #6 amended per D-06).
+- Per-block smokes for Blocks A-G all user-attested PASS (recorded inline in CLAIM.md).
+- Final cross-collection rules audit (48 rows) attested in `rules-audit-final.md`.
+- `firebase deploy --only firestore,storage` clean (no auto-create prompts).
+
+**What was ruled out:**
+
+- **PITFALLS C3 (rules misconfig data leak):** Mitigated via D-06's per-block manual audits + final cross-collection audit; cumulative evidence (8 audits, 48-row matrix) reduces risk substantially though does not eliminate it entirely. v2 candidate: introduce `@firebase/rules-unit-testing` once emulator + flake budget allow.
+- **PITFALLS C1 (negative qty race):** Mitigated via `runTransaction` invariant assert at app layer + rules-layer `availableQty >= 0` check. Verified via 2-browser race.
+- **PITFALLS C5 (stuck-out items / orphan checkouts):** Mitigated via `retireItem` `ITEM_OUT` guard (refuses when `outQty > 0`). Nightly scanner deferred to v2 per D-02; manual ops via /reports/out documented.
+- **PITFALLS C6 (Admin SDK on client):** Mitigated via `import "server-only"` on every server-side module (`lib/firebase/admin.ts` + all `actions.ts` + all `.server.ts` files). Build-time error if violated. Verified via `grep` for `firebase-admin` in `.next/static/chunks/` — empty.
+
+**Outstanding caveats (v2 candidates — documented in plan SUMMARY files):**
+
+- PWA icon PNGs (`public/icon-192.png`, `public/icon-512.png`) — Lighthouse PWA installability warns until real artwork ships.
+- Scan-cart sessionStorage cross-tab stress test (current implementation handles same-tab refresh + token refresh; multi-tab concurrent edit not exhaustively tested).
+- CI-07 partial check-in granularity: single check-in closes parent line; multiple-against-same-parent requires multiple Server Action calls (matches Phase 1 contract).
+- `adjustItemStock` could defensively `revalidatePath('/reports/repurchase')` when crossing the low-stock threshold (audit-noted; non-blocking).
+- Storage write rule re-tightening (currently relaxed to any signed-in; admin gate enforced upstream).
+- Node 20 runtime deprecation Q4 2026 (functions/ directory deleted; only relevant if v2 reintroduces Cloud Functions).
+- `unauthorized()` Next 16 experimental API: `app/unauthorized.tsx` staged but DAL still uses `redirect("/unauthorized")` until `authInterrupts` stabilizes.
+- TanStack `useReactTable` React Compiler `react-hooks/incompatible-library` warnings (12): library limitation, will resolve when TanStack ships memoization-safe variants.
+
+**Architectural amendments locked in CHANGELOG.md + per-plan SUMMARYs:**
+
+- D-02 (re-amended commit 93bf62d): Cloud Functions inlined into Server Actions.
+- D-06: Firestore rules unit tests skipped, replaced by manual audit chain.
+- D-15: Inventory photo field added to UI surface.
+- D-17: Cursor URL contract replaces `?page=N` on all list pages.
+- D-19: `persistentLocalCache` corrected (was `enableIndexedDbPersistence`, deprecated in firebase ^12).
+- Storage write rule (commit 96cf12a): relaxed to any signed-in; admin gate upstream.
+- Event status (commit b23c449): derived from dates, not stored field.
+- Reports sub-nav (commit 319fa9c): added so users can switch between 5 reports.
+
+**Sign-off:**
+
+Phase 2 — Functionality — **COMPLETE on 2026-05-27**. All ROADMAP success criteria met (with criterion #6 amended per D-06). cy-eventsystem v1 is shippable pending PR review.

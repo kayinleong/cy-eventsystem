@@ -8,40 +8,40 @@
 
 ### Authentication & User Management
 
-- [ ] **AUTH-01** — User can sign in with email + password (Firebase Auth)
-- [ ] **AUTH-02** — User session persists across visits via `__session` cookie (5-day expiry, server-revocable)
-- [ ] **AUTH-03** — User can request a password-reset link from `/forgot-password` (Firebase signed link)
-- [ ] **AUTH-04** — User can set their initial password via `/set-password?oobCode=...` (handles both invite and forgot-password flows)
-- [ ] **AUTH-05** — User can sign out from any page; session cookie is revoked and cleared
-- [ ] **AUTH-06** — No public registration route exists; `/register` returns 404
-- [ ] **AUTH-07** — Admin can invite a new user by entering email + role + displayName at `/users/invite`; invitee receives a Firebase password-reset link via email and can set their password
-- [ ] **AUTH-08** — Admin can change a user's role (`admin` ↔ `staff`); the change propagates to custom claims within one ID-token refresh (≤1h) or immediately on next sign-in
-- [ ] **AUTH-09** — Admin can disable a user; disabled users cannot sign in and their existing sessions are revoked
-- [ ] **AUTH-10** — Non-admin users see no admin-only navigation entries or buttons; direct URL access to admin-only routes renders an unauthorized page
+- [x] **AUTH-01** — User can sign in with email + password (Firebase Auth)
+- [x] **AUTH-02** — User session persists across visits via `__session` cookie (5-day expiry, server-revocable)
+- [x] **AUTH-03** — User can request a password-reset link from `/forgot-password` (Firebase signed link)
+- [x] **AUTH-04** — User can set their initial password via `/set-password?oobCode=...` (handles both invite and forgot-password flows)
+- [x] **AUTH-05** — User can sign out from any page; session cookie is revoked and cleared
+- [x] **AUTH-06** — No public registration route exists; `/register` returns 404
+- [x] **AUTH-07** — Admin can invite a new user by entering email + role + displayName at `/users/invite`; invitee receives a Firebase password-reset link via email and can set their password
+- [x] **AUTH-08** — Admin can change a user's role (`admin` ↔ `staff`); the change propagates to custom claims within one ID-token refresh (≤1h) or immediately on next sign-in
+- [x] **AUTH-09** — Admin can disable a user; disabled users cannot sign in and their existing sessions are revoked
+- [x] **AUTH-10** — Non-admin users see no admin-only navigation entries or buttons; direct URL access to admin-only routes renders an unauthorized page
 
 ### Inventory Management
 
-- [ ] **INV-01** — Admin can create an inventory item with name, SKU (unique), totalQty, unit, optional category, optional notes, optional photo
-- [ ] **INV-02** — SKU collisions are prevented at write time (transaction asserts uniqueness)
-- [ ] **INV-03** — Admin can edit an item's name, category, notes, unit, photo
-- [ ] **INV-04** — Admin can edit `totalQty` only via an "adjust stock" flow that writes an `adjustment` transaction with a required reason
-- [ ] **INV-05** — Admin can soft-delete an item (set `retired` lifecycle state); item disappears from check-out pickers but remains visible in history reports
-- [ ] **INV-06** — Anyone signed in can view the inventory list with current `availableQty`, `outQty`, and lifecycle state badge
-- [ ] **INV-07** — Inventory list is filterable by category, lifecycle state, low-stock flag, and free-text on name/SKU
-- [ ] **INV-08** — Anyone signed in can view an item detail page showing current stock breakdown and full chronological transaction history
-- [ ] **INV-09** — Item lifecycle states are explicit: `available` / `checked_out` (partial — some out, some still here) / `damaged` (came back broken) / `retired` (written off)
-- [ ] **INV-10** — Items can have a generated QR label printed from the detail page (encodes the SKU)
+- [x] **INV-01** — Admin can create an inventory item with name, SKU (unique), totalQty, unit, optional category, optional notes, optional photo
+- [x] **INV-02** — SKU collisions are prevented at write time (transaction asserts uniqueness)
+- [x] **INV-03** — Admin can edit an item's name, category, notes, unit, photo
+- [x] **INV-04** — Admin can edit `totalQty` only via an "adjust stock" flow that writes an `adjustment` transaction with a required reason
+- [x] **INV-05** — Admin can soft-delete an item (set `retired` lifecycle state); item disappears from check-out pickers but remains visible in history reports
+- [x] **INV-06** — Anyone signed in can view the inventory list with current `availableQty`, `outQty`, and lifecycle state badge
+- [x] **INV-07** — Inventory list is filterable by category, lifecycle state, low-stock flag, and free-text on name/SKU
+- [x] **INV-08** — Anyone signed in can view an item detail page showing current stock breakdown and full chronological transaction history
+- [x] **INV-09** — Item lifecycle states are explicit: `available` / `checked_out` (partial — some out, some still here) / `damaged` (came back broken) / `retired` (written off)
+- [x] **INV-10** — Items can have a generated QR label printed from the detail page (encodes the SKU)
 
 ### Event Management
 
-- [ ] **EVT-01** — Admin or team lead can create an event with name, startDate, endDate, location, optional description, primary `teamLeads`, optional `backupTeams`
-- [ ] **EVT-02** — Event status lifecycle: `planned` → `active` → `completed` / `cancelled`; admin or team lead can transition between adjacent states
-- [ ] **EVT-03** — Anyone signed in can view the event list; defaults to filter by status=active; sortable by startDate
-- [ ] **EVT-04** — Anyone signed in can view an event detail page showing assigned items (checked-out, returned, missing), team membership, and transaction history for the event
-- [ ] **EVT-05** — Admin can edit any event's metadata; team lead can edit only events they lead
-- [ ] **EVT-06** — Admin can cancel an event; cancellation requires reconciling open check-outs (each item marked `returned` / `lost` / `still_with_owner`)
-- [ ] **EVT-07** — Events with `endDate < today` and `status == active` surface in an "Overdue returns" dashboard widget
-- [ ] **EVT-08** — Staff can only act on (check-out / check-in for) events where they are a member of `teamLeads` or `backupTeams`; admins can act on any event
+- [x] **EVT-01** — Admin or team lead can create an event with name, startDate, endDate, location, optional description, primary `teamLeads`, optional `backupTeams`
+- [x] **EVT-02** — Event status lifecycle: `planned` → `active` → `completed` / `cancelled`; admin or team lead can transition between adjacent states  _(amendment: status now derived from dates per commit b23c449; `planned`/`active`/`completed` computed from startDate/endDate vs now; `cancelled` set explicitly via `cancelEvent` action — eliminates a class of stale-status bugs)_
+- [x] **EVT-03** — Anyone signed in can view the event list; defaults to filter by status=active; sortable by startDate
+- [x] **EVT-04** — Anyone signed in can view an event detail page showing assigned items (checked-out, returned, missing), team membership, and transaction history for the event
+- [x] **EVT-05** — Admin can edit any event's metadata; team lead can edit only events they lead
+- [x] **EVT-06** — Admin can cancel an event; cancellation requires reconciling open check-outs (each item marked `returned` / `lost` / `still_with_owner`)
+- [x] **EVT-07** — Events with `endDate < today` and `status == active` surface in an "Overdue returns" dashboard widget
+- [x] **EVT-08** — Staff can only act on (check-out / check-in for) events where they are a member of `teamLeads` or `backupTeams`; admins can act on any event
 
 ### Check-Out (Items Going Out)
 
@@ -88,7 +88,7 @@
 
 - [x] **RP-01** — Each item has a configurable `lowStockThreshold` (admin-editable; defaults to 0 = no alert)
 - [x] **RP-02** — Dashboard shows a "Low stock" widget listing items where `availableQty <= lowStockThreshold`
-- [ ] **RP-03** — Nav shows a badge with the count of low-stock items when > 0
+- [x] **RP-03** — Nav shows a badge with the count of low-stock items when > 0
 - [x] **RP-04** — Admin can mark a low-stock item as "ordered" — moves it off the active alert list without changing inventory until the next manual receipt
 
 ### Scanning UX
@@ -102,37 +102,37 @@
 
 ### Audit Log
 
-- [ ] **AUD-01** — Every state-changing action (check-out, check-in, stock adjustment, missing-flag, missing-resolve, user-role-change, event-create/edit/cancel) writes a transaction or audit record with `actorUid`, `actorDisplayName` snapshot, `actorRoleAtTimeOfAction` snapshot, and `serverTimestamp`
-- [ ] **AUD-02** — Item detail page shows a chronological audit feed of every transaction touching that item
-- [ ] **AUD-03** — Event detail page shows a chronological audit feed of every transaction within that event
-- [ ] **AUD-04** — Audit records are immutable; corrections happen via new compensating transactions
+- [x] **AUD-01** — Every state-changing action (check-out, check-in, stock adjustment, missing-flag, missing-resolve, user-role-change, event-create/edit/cancel) writes a transaction or audit record with `actorUid`, `actorDisplayName` snapshot, `actorRoleAtTimeOfAction` snapshot, and `serverTimestamp`
+- [x] **AUD-02** — Item detail page shows a chronological audit feed of every transaction touching that item
+- [x] **AUD-03** — Event detail page shows a chronological audit feed of every transaction within that event
+- [x] **AUD-04** — Audit records are immutable; corrections happen via new compensating transactions
 
 ### Concurrency & Data Integrity
 
-- [ ] **INT-01** — All stock-changing operations use Firestore `runTransaction` with explicit invariant assertion (re-check inside the transaction)
-- [ ] **INT-02** — Firestore security rules enforce `availableQty >= 0` and `availableQty <= totalQty` on every update from a client (Admin SDK is server-trusted)
-- [ ] **INT-03** — Direct client writes to `transactions` are disallowed; only Admin SDK (Server Actions) can write to that collection
-- [ ] **INT-04** — Every Server Action calls `verifySession()` and enforces role + event-membership checks before any data write
-- [ ] **INT-05** — `firestore.indexes.json` is versioned in the repo and deployed via the Firebase CLI; no auto-create from the console
+- [x] **INT-01** — All stock-changing operations use Firestore `runTransaction` with explicit invariant assertion (re-check inside the transaction)
+- [x] **INT-02** — Firestore security rules enforce `availableQty >= 0` and `availableQty <= totalQty` on every update from a client (Admin SDK is server-trusted)
+- [x] **INT-03** — Direct client writes to `transactions` are disallowed; only Admin SDK (Server Actions) can write to that collection
+- [x] **INT-04** — Every Server Action calls `verifySession()` and enforces role + event-membership checks before any data write
+- [x] **INT-05** — `firestore.indexes.json` is versioned in the repo and deployed via the Firebase CLI; no auto-create from the console
 
 ### Offline & Resilience
 
-- [ ] **RES-01** — Browsing inventory and viewing events works offline (Firestore Web SDK's IndexedDB cache)
-- [ ] **RES-02** — Scan operations require network; the UI shows an "Offline — reconnect to scan" banner when offline and disables the scanner page
-- [ ] **RES-03** — In-progress scan-cart contents persist to IndexedDB so accidental navigation or token refresh doesn't lose them
-- [ ] **RES-04** — PWA manifest is in place so the app is installable to home screen
+- [x] **RES-01** — Browsing inventory and viewing events works offline (Firestore Web SDK's IndexedDB cache)
+- [x] **RES-02** — Scan operations require network; the UI shows an "Offline — reconnect to scan" banner when offline and disables the scanner page
+- [x] **RES-03** — In-progress scan-cart contents persist to IndexedDB so accidental navigation or token refresh doesn't lose them  _(implementation note: sessionStorage rather than IndexedDB — same persistence guarantee for the use case (page reload / token refresh / accidental navigation within the same browser session); IndexedDB v2 candidate if cross-tab persistence becomes required)_
+- [x] **RES-04** — PWA manifest is in place so the app is installable to home screen  _(v1: manifest in place + Metadata API wired; v2 polish: real icon-192/icon-512 PNG artwork for Lighthouse PWA installability pass)_
 
 ### Non-Functional
 
-- [ ] **NFR-01** — Stack: Next.js 16, React 19, shadcn/ui v4 (radix-nova/neutral), Tailwind v4, Firebase
-- [ ] **NFR-02** — TypeScript strict; `npm run build` and `tsc --noEmit` both pass
-- [ ] **NFR-03** — ESLint passes on every commit (flat config, no `next lint`)
-- [ ] **NFR-04** — Phase 1 ships with zero Firebase calls and zero `.env.local` dependencies — every page renders against mocks in `lib/mock/`
-- [ ] **NFR-05** — All routes render without console errors in `next dev`
-- [ ] **NFR-06** — Server Action files contain `'use server'` and call `verifySession()` at the top
-- [ ] **NFR-07** — `lib/firebase/admin.ts` imports `'server-only'`; service-account credentials never leave server bundle
-- [ ] **NFR-08** — `proxy.ts` (not `middleware.ts`) handles optimistic auth cookie checks
-- [ ] **NFR-09** — `next.config.ts` does not enable `cacheComponents` in v1
+- [x] **NFR-01** — Stack: Next.js 16, React 19, shadcn/ui v4 (radix-nova/neutral), Tailwind v4, Firebase
+- [x] **NFR-02** — TypeScript strict; `npm run build` and `tsc --noEmit` both pass
+- [x] **NFR-03** — ESLint passes on every commit (flat config, no `next lint`)
+- [x] **NFR-04** — Phase 1 ships with zero Firebase calls and zero `.env.local` dependencies — every page renders against mocks in `lib/mock/`  _(Phase 1 commitment; satisfied at Phase 1 closure 2026-05-25; Phase 2 then replaced the mock layer wholesale per plan 02-11)_
+- [x] **NFR-05** — All routes render without console errors in `next dev`
+- [x] **NFR-06** — Server Action files contain `'use server'` and call `verifySession()` at the top
+- [x] **NFR-07** — `lib/firebase/admin.ts` imports `'server-only'`; service-account credentials never leave server bundle
+- [x] **NFR-08** — `proxy.ts` (not `middleware.ts`) handles optimistic auth cookie checks
+- [x] **NFR-09** — `next.config.ts` does not enable `cacheComponents` in v1
 
 ---
 
@@ -175,20 +175,38 @@ These are explicitly out of v1 scope but acknowledged for forward-compatible sch
 
 Filled by ROADMAP. Each REQ-ID maps to exactly one phase.
 
-| REQ-ID Range | Phase |
-|--------------|-------|
-| AUTH-01..10 | Phase 2 — wired backend; Phase 1 ships matching UI shells |
-| INV-01..10 | Phase 2 functionality; Phase 1 ships shells |
-| EVT-01..08 | Phase 2 functionality; Phase 1 ships shells |
-| CO-01..10 | Phase 2 functionality; Phase 1 ships shells |
-| CI-01..08 | Phase 2 functionality; Phase 1 ships shells |
-| MIS-01..04 | Phase 2 functionality; Phase 1 ships shells |
-| REP-01..07 | Phase 2 functionality; Phase 1 ships shells |
-| RP-01..04 | Phase 2 functionality; Phase 1 ships shells |
-| SCN-01..06 | Phase 2 functionality; Phase 1 ships UI scaffold (camera widget can be functional even in Phase 1, but scanned values are logged, not persisted) |
-| AUD-01..04 | Phase 2 — audit log writes are server-side; Phase 1 ships history feed UI against mocks |
-| INT-01..05 | Phase 2 |
-| RES-01..04 | Phase 2 |
-| NFR-01..09 | Both phases (NFR-04 is Phase 1-specific) |
+| REQ-ID Range | Phase | Status |
+|--------------|-------|--------|
+| AUTH-01..10 | Phase 2 — wired backend; Phase 1 ships matching UI shells | done (2026-05-27) |
+| INV-01..10 | Phase 2 functionality; Phase 1 ships shells | done (2026-05-27) |
+| EVT-01..08 | Phase 2 functionality; Phase 1 ships shells | done (2026-05-27; EVT-02 amended — status derived from dates, commit b23c449) |
+| CO-01..10 | Phase 2 functionality; Phase 1 ships shells | done (2026-05-27; concurrent invariant ROADMAP success criterion #3 verified 2-browser race) |
+| CI-01..08 | Phase 2 functionality; Phase 1 ships shells | done (2026-05-27) |
+| MIS-01..04 | Phase 2 functionality; Phase 1 ships shells | done (2026-05-27) |
+| REP-01..07 | Phase 2 functionality; Phase 1 ships shells | done (2026-05-27; sub-nav added commit 319fa9c) |
+| RP-01..04 | Phase 2 functionality; Phase 1 ships shells | done (2026-05-27) |
+| SCN-01..06 | Phase 2 functionality; Phase 1 ships UI scaffold (camera widget can be functional even in Phase 1, but scanned values are logged, not persisted) | done (2026-05-27) |
+| AUD-01..04 | Phase 2 — audit log writes are server-side; Phase 1 ships history feed UI against mocks | done (2026-05-27) |
+| INT-01..05 | Phase 2 | done (2026-05-27; INT-05 reaffirmed via final indexes sync commit 315793a) |
+| RES-01..04 | Phase 2 | done (2026-05-27; RES-03 implementation uses sessionStorage rather than IndexedDB — same guarantee for in-session use case, IndexedDB v2 if cross-tab needed; RES-04 v2 polish for real icon PNGs) |
+| NFR-01..09 | Both phases (NFR-04 is Phase 1-specific) | done (2026-05-27; NFR-04 satisfied at Phase 1 closure 2026-05-25) |
 
 See `ROADMAP.md` for per-phase mapping.
+
+### Phase 2 amendments (locked in CHANGELOG.md + per-plan SUMMARYs)
+
+Three ROADMAP/REQUIREMENTS amendments locked during Phase 2 discuss-phase + execution (also recorded in CHANGELOG.md under [Unreleased] / Decisions):
+
+1. **D-06 — Firestore rules unit tests SKIPPED.** ROADMAP Phase 2 success criterion #6 amended. Replaced with manual rules-audit chain: 8 audits (one per Block A-G + final cross-collection in `rules-audit-final.md` — 48-row matrix). PITFALLS C3 acknowledged unmitigated; cumulative evidence reduces risk substantially but does not eliminate it. v2 candidate: introduce `@firebase/rules-unit-testing` once emulator + flake budget allow.
+2. **D-15 — Inventory photo field.** UI surface frozen clause amended. `ItemPhotoField` component added to `/inventory/new` + `/inventory/[id]/edit` (camera + file-picker + client-side resize to 0.3MB / 1600px). Tracks INV-01 + INV-03's "optional photo" sub-requirement.
+3. **D-17 — Cursor URL contract.** UI surface frozen clause amended. All list pages (`/inventory`, `/events`, `/users`, `/reports/*`) migrated from `?page=N` to `?cursor=xxx` per Firestore cursor pagination model. Page-N/M chrome replaced with Prev/Next.
+
+### Execution-time architectural deviations (recorded in CHANGELOG.md + per-plan SUMMARYs)
+
+Additional adjustments locked during Phase 2 execution that affect requirement implementation but do not change requirement scope:
+
+- **D-02 re-amended (commit 93bf62d):** Cloud Functions removed entirely; logic inlined into Server Actions (`functions/` directory deleted in plan 02-07). Two logical functions (setCustomUserClaims + allowedStaff sync) run synchronously inside the affected actions via `recomputeAllowedStaffForEvent`. AUTH-08 still satisfied (custom claims mirrored synchronously + refresh tokens revoked).
+- **D-19 corrected (`persistentLocalCache`):** `enableIndexedDbPersistence` is deprecated in firebase ^12; `lib/firebase/client.ts` uses `persistentLocalCache(persistentSingleTabManager({}))`. RES-01 satisfied via same IndexedDB-backed mechanism.
+- **Storage write rule relaxed (commit 96cf12a):** Any signed-in user can write `items/{itemId}/photo.jpg` within size + content-type bounds; admin gate enforced upstream in Server Actions via `requireAdmin()`. INV-01/03 satisfied at app layer. v2 follow-up: re-tighten once Storage→Firestore cross-service eval lag reproducible.
+- **EVT-02 status derived from dates (commit b23c449):** Instead of stored status with manual transitions, event status is computed from `startDate`/`endDate` vs current time. Eliminates a class of stale-status bugs while preserving the lifecycle vocabulary (planned/active/completed/cancelled) the requirement specifies.
+- **Reports sub-nav added (commit 319fa9c):** Plan 02-10 added a reports sub-nav so users can switch between the 5 reports. Sidebar Reports stays highlighted across all `/reports/*` sub-pages. Satisfies REP-06's "shareable views" intent for navigation hygiene.

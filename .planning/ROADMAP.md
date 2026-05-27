@@ -1,11 +1,12 @@
 # ROADMAP — cy-eventsystem v1
 
 **Locked at init:** exactly 2 phases, per user requirement.
+**Status (2026-05-27):** v1 COMPLETE. Both phases shipped. Pending PR review per global CLAUDE.md "Review & Merge Etiquette".
 
-| Phase | ID | Name | Goal |
-|-------|----|----|------|
-| 1 | `phase-kayinleong-01` | **UI POC** | Every route renders end-to-end with mock data. No Firebase. Stakeholders can click through the full app and approve the surface before backend cost. |
-| 2 | `phase-kayinleong-02` | **Functionality** | Wire Firebase Auth + Firestore + transactions + scanning. Replace mocks with real data. Ship a working v1. |
+| Phase | ID | Name | Goal | Status |
+|-------|----|----|------|--------|
+| 1 | `phase-kayinleong-01` | **UI POC** | Every route renders end-to-end with mock data. No Firebase. Stakeholders can click through the full app and approve the surface before backend cost. | done (13/13 plans, 2026-05-25) |
+| 2 | `phase-kayinleong-02` | **Functionality** | Wire Firebase Auth + Firestore + transactions + scanning. Replace mocks with real data. Ship a working v1. | done (15/15 plans, 2026-05-27; automated gates green, regression report in CLAIM.md) |
 
 ---
 
@@ -174,41 +175,41 @@ All v1 requirements not delivered in Phase 1 land here, plus the functional half
 ### Plans (15 plans across 13 waves)
 
 **Wave 1 — Spike (gates everything; autonomous: false)**
-- [ ] 02-01-spike-auth-edge-PLAN.md — 1-day spike on `next-firebase-auth-edge` v1.12 against Next 16.2.6 per D-01; FINDINGS.md gates plan 02-02
+- [x] 02-01-spike-auth-edge-PLAN.md — 1-day spike on `next-firebase-auth-edge` v1.12 against Next 16.2.6 per D-01; FINDINGS.md gates plan 02-02 — _completed 2026-05-25 (verdict: PROCEED_AS_PLANNED; key correction: use `getTokens()` not `verifySessionCookie()`)_
 
 **Wave 2-3 — Block A Foundation**
-- [ ] 02-02-firebase-clients-and-proxy-PLAN.md — Firebase clients + proxy.ts + DAL + session route handlers + firestore.rules/indexes/storage manifests
-- [ ] 02-03-auth-pages-wired-PLAN.md — /login + /forgot-password + /set-password wired to Firebase; (app)/layout role gate swapped; seed-first-admin.ts; POC affordances deleted
+- [x] 02-02-firebase-clients-and-proxy-PLAN.md — Firebase clients + proxy.ts + DAL + session route handlers + firestore.rules/indexes/storage manifests — _completed 2026-05-25 (commits cd9d885, 2130aea, 1344a0f, ac5e1ad, 26452f2, e3a89a0; Block A Rules Playground 5/5 attested PASS)_
+- [x] 02-03-auth-pages-wired-PLAN.md — /login + /forgot-password + /set-password wired to Firebase; (app)/layout role gate swapped; seed-first-admin.ts; POC affordances deleted — _completed 2026-05-25 (commits 03c6a1d, 05899e4, f9d4f40, e6d0021, 390a218)_
 
 **Wave 4 — Block B Users**
-- [ ] 02-04-users-cloud-function-and-actions-PLAN.md — 2 Cloud Functions (setCustomUserClaims + allowedStaff sync); inviteUser/setUserRole/disableUser Server Actions; Copy-link UI per D-09
+- [x] 02-04-users-cloud-function-and-actions-PLAN.md — Cloud Functions re-amended to inlined Server Actions per D-02 (commit 93bf62d); inviteUser/setUserRole/disableUser Server Actions; Copy-link UI per D-09 — _completed 2026-05-25 (commits bca3052, e8bca18, d1b687f, 6f93334, 27df45b)_
 
 **Wave 5-6 — Block C Inventory**
-- [ ] 02-05-inventory-data-layer-and-actions-PLAN.md — Admin SDK readers + live hooks + photo upload helper + 6 Server Actions with isLowStock denorm per P11
-- [ ] 02-06-inventory-ui-photo-and-cursor-PLAN.md — UI swap to actions; D-15 photo field; D-17 cursor URL migration; audit feed; Block C rules audit
+- [x] 02-05-inventory-data-layer-and-actions-PLAN.md — Admin SDK readers + live hooks + photo upload helper + 6 Server Actions with isLowStock denorm per P11 — _completed 2026-05-25 (commits 7755412, 232264f, 20c015f, 0ad8a35)_
+- [x] 02-06-inventory-ui-photo-and-cursor-PLAN.md — UI swap to actions; D-15 photo field; D-17 cursor URL migration; audit feed; Block C rules audit — _completed 2026-05-25 (commits 0538e31, 456fa04, 8ae847f, b2808ec; storage rule relaxed in commit 96cf12a)_
 
 **Wave 7 — Block D Events**
-- [ ] 02-07-events-data-and-cloud-function-PLAN.md — events data layer + 3 Server Actions; EVT-08 at 3 layers; Cloud Function 2 verified; Block D rules audit
+- [x] 02-07-events-data-and-cloud-function-PLAN.md — events data layer + 3 Server Actions; EVT-08 at 3 layers; allowedStaff sync inlined (functions/ deleted per D-02 re-amendment); Block D rules audit — _completed 2026-05-26 (commits a5c46ec, 044cd95, 1618846, 1f7a86b, b1f0072, a1750c5)_
 
 **Wave 8 — Block E Checkout**
-- [ ] 02-08-checkout-action-and-scan-PLAN.md — commitCheckoutCartAction marquee transaction; CO-05 invariant; useOptimistic revert preserved; concurrent invariant test
+- [x] 02-08-checkout-action-and-scan-PLAN.md — commitCheckoutCartAction marquee transaction; CO-05 invariant; useOptimistic revert preserved; concurrent invariant test PASS (2-browser race, ROADMAP success criterion #3) — _completed 2026-05-26 (commits 95ebffa, b9b5d37, 980d980)_
 
 **Wave 9 — Block F Check-in + Missing**
-- [ ] 02-09-checkin-action-and-missing-PLAN.md — commitCheckinCartAction; CI-06 damaged routing; MIS-01..04; resolveMissing admin action; Block F rules audit
+- [x] 02-09-checkin-action-and-missing-PLAN.md — commitCheckinCartAction; CI-06 damaged routing; MIS-01..04; resolveMissing admin action; Block F rules audit; event status now derived from dates (commit b23c449) — _completed 2026-05-26 (commits 96e992e, c283ad2, 4e2452b, 05f9cf1)_
 
 **Wave 10 — Block G Reports**
-- [ ] 02-10-reports-and-aggregations-PLAN.md — 5 reports + dashboard KPIs via count() (D-21); RP-03 nav badge; Block G rules audit
+- [x] 02-10-reports-and-aggregations-PLAN.md — 5 reports + dashboard KPIs via count() (D-21); RP-03 nav badge; reports sub-nav added (commit 319fa9c); Block G rules audit — _completed 2026-05-26 (commits 69f5c60, 3842f68, 5dc6aae, e2a979f, 025693d, 6c4a178, d7dcda5)_
 
 **Wave 11-12 — Block H Hardening**
-- [ ] 02-11-server-action-and-revalidate-audit-PLAN.md — Server Action audit matrix; delete lib/mock wholesale
-- [ ] 02-12-error-loading-not-found-segments-PLAN.md — per-segment error.tsx/loading.tsx/not-found.tsx + unauthorized.tsx
-- [ ] 02-13-offline-and-pwa-PLAN.md — OfflineBanner + scanner-disable-on-offline + PWA manifest (RES-01..04)
-- [ ] 02-14-rules-and-index-audit-PLAN.md — final cross-collection Rules Playground audit + index reconciliation
+- [x] 02-11-server-action-and-revalidate-audit-PLAN.md — Server Action audit matrix (15 actions, 106/106 PASS); delete lib/mock wholesale (10 files, ~93KB) — _completed 2026-05-26 (commits 7c02d98, db2b96b)_
+- [x] 02-12-error-loading-not-found-segments-PLAN.md — per-segment error.tsx/loading.tsx/not-found.tsx + unauthorized.tsx (9 special files) — _completed 2026-05-26 (commits c5759d8, 28b5a88)_
+- [x] 02-13-offline-and-pwa-PLAN.md — OfflineBanner + scanner-disable-on-offline + scan-cart sessionStorage + PWA manifest (RES-01..04) — _completed 2026-05-26 (commits e19b640, c8fc56b, ab53888, 37353cb, 2eeb81c, 06adf05)_
+- [x] 02-14-rules-and-index-audit-PLAN.md — final cross-collection Rules Playground audit (48 rows) + index reconciliation (19 indexes, INT-05 reaffirmed) — _completed 2026-05-27 (commits 0e4c889, 315793a)_
 
 **Wave 13 — Verification gate**
-- [ ] 02-15-verification-gate-PLAN.md — 10-step acceptance demo + automated gates + CLAIM.md closure
+- [x] 02-15-verification-gate-PLAN.md — 10-step acceptance demo + automated gates + CLAIM.md closure — _completed 2026-05-27 (single atomic closure commit; status: done; Phase 2 — Functionality — COMPLETE)_
 
-**Plans:** 15 plans
+**Plans:** 15 plans — **ALL COMPLETE (2026-05-27)**
 
 ### Out of scope for Phase 2 (i.e., v2 candidates)
 
