@@ -6,7 +6,7 @@
 - started: 2026-05-25
 - status: in-progress
 - summary: Functionality — wire Firebase Auth + Firestore + 2 Cloud Functions + Storage; replace every mock with real backend; UI surface frozen from Phase 1
-- current plan: 02-13 COMPLETE (Offline UX + PWA manifest — Wave 11, Block H RES-01..04/NFR-09); global OfflineBanner above (app) shell subscribes to `navigator.onLine`; ScannerWidget early-returns a WifiOff disabled placeholder when offline so /scan + /events/[id]/checkout + /events/[id]/checkin gracefully degrade (D-19 — write paths require server reachability); scan-cart + selectedEvent + mode persist to sessionStorage under versioned key `scan-cart-v1` with 4h staleness guard so token refresh / accidental refresh during a scan session doesn't lose work — RES-03 DELIVERED (not partial); PWA manifest at `public/manifest.webmanifest` wired through Next 16 Metadata API; theme color moved to the new Viewport export per Next 16 deprecation. T-02-13-01 mitigated (offline writes gated at the widget). T-02-13-02 + T-02-13-03 accepted (per the plan threat register). v2 polish: PWA icon PNGs (192/512) still need real artwork to clear Lighthouse PWA install warnings. 02-12 COMPLETE (per-segment error/loading/not-found/unauthorized boundaries). 02-11 COMPLETE (Server Action audit + lib/mock wholesale wipe).
+- current plan: 02-14 (final cross-collection rules + index audit — Wave 12); 02-11/12/13 all PASS incl. Block H offline + PWA smoke + offline-aware error.tsx (commit 06adf05); 02-15 verification gate is the only plan after this.
 
 ## What will change
 
