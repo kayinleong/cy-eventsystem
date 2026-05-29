@@ -3,7 +3,7 @@
 **Project:** cy-eventsystem
 **Owner:** kayinleong
 **Current milestone:** v1 — **COMPLETE 2026-05-27**
-**Last updated:** 2026-05-27 (Phase 2 — Functionality — COMPLETE. All 15 plans across 13 waves shipped. All 3 automated gates green. cy-eventsystem v1 shippable pending PR review.)
+**Last updated:** 2026-05-29 (Quick task quick-kayinleong-001 — user-feedback enhancements: barcode format picker, item location, DO upload minimal slice — landed in 4 atomic commits on main; automated gates PASS; manual smoke deferred to pre-PR.)
 
 ---
 
@@ -16,7 +16,15 @@
 
 ## Current focus
 
-**v1 COMPLETE 2026-05-27.** Both phases of the locked 2-phase roadmap shipped. cy-eventsystem v1 is shippable pending PR review. Developer should review the closure commit (`docs(phase-kayinleong-02): Phase 2 COMPLETE — verification gate PASS, status done`) and push to remote, then open PR for human review per global CLAUDE.md "AI-authored code needs independent human review". PR description should include claim ID `phase-kayinleong-02`, regression report excerpt from CLAIM.md `## Verification` section, links to `audit-server-actions.md` + `rules-audit-final.md`, and the list of UI surface amendments (D-15 photo + D-17 cursor URLs). Tag v1.0.0 release when PR merges.
+**v1 COMPLETE 2026-05-27** — both phases shipped. **Quick task quick-kayinleong-001 (2026-05-29)** layered three user-feedback enhancements on top of v1 without touching any quantity-mutating Server Action: label barcode format picker (QR / Code 128 / Code 39 / EAN-13, refuses-with-hint on invalid SKU), free-text `location` field on inventory items, and Delivery Order (DO) upload minimal slice (new `/delivery-orders` admin pages + `deliveryOrders` collection + Storage path + back-references on items). Photo upload was already shipped and was deliberately not re-touched. All 4 commits on main; `tsc` clean, `lint` 0-errors (only pre-existing TanStack warnings), `npm run build` PASS, 28 routes including 3 new `/delivery-orders` routes. Manual smoke deferred — see SUMMARY.md "Smoke plan". Push when ready and open PR.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commits | Directory |
+|---|-------------|------|---------|-----------|
+| quick-kayinleong-001 | Barcode format picker + item location + DO upload (minimal slice). Photo skipped — already shipped. | 2026-05-29 | c5082df, ee76b65, 31a4d70, a20188a | [quick-kayinleong-001](./quick/quick-kayinleong-001/) |
+
+**v1 COMPLETE 2026-05-27 (verbatim from prior session).** Both phases of the locked 2-phase roadmap shipped. cy-eventsystem v1 is shippable pending PR review. Developer should review the closure commit (`docs(phase-kayinleong-02): Phase 2 COMPLETE — verification gate PASS, status done`) and push to remote, then open PR for human review per global CLAUDE.md "AI-authored code needs independent human review". PR description should include claim ID `phase-kayinleong-02`, regression report excerpt from CLAIM.md `## Verification` section, links to `audit-server-actions.md` + `rules-audit-final.md`, and the list of UI surface amendments (D-15 photo + D-17 cursor URLs). Tag v1.0.0 release when PR merges.
 
 **v2 candidates** documented in 02-15-verification-gate-SUMMARY.md "v2 Polish" section: PWA icon PNGs, storage write rule re-tightening, scan-cart cross-tab stress test, `adjustItemStock` defensive revalidation, frequently-flagged-missing report signal, `unauthorized()` API graduation, Cloud Functions reintroduction (if v2 needs them; current implementation inlined per re-amended D-02).
 
