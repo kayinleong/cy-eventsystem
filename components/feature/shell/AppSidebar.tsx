@@ -21,6 +21,7 @@ import {
   Calendar,
   ScanLine,
   BarChart3,
+  Truck,
   Users,
   Settings,
   type LucideIcon,
@@ -47,6 +48,7 @@ const items: ReadonlyArray<NavItem> = [
   { href: "/scan",          label: "Scan",      icon: ScanLine,        roles: ["admin", "staff"] },
   { href: "/events",        label: "Events",    icon: Calendar,        roles: ["admin", "staff"] },
   { href: "/reports/stock", label: "Reports",   icon: BarChart3,       roles: ["admin", "staff"], matchPrefix: "/reports" },
+  { href: "/delivery-orders", label: "Delivery Orders", icon: Truck,   roles: ["admin"] }, // quick-kayinleong-001
   { href: "/users",         label: "Users",     icon: Users,           roles: ["admin"] }, // AUTH-10
   { href: "/settings",      label: "Settings",  icon: Settings,        roles: ["admin", "staff"] },
 ];

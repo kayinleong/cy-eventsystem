@@ -16,10 +16,43 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { verifySession } from "@/lib/auth/dal";
+import { adminDb } from "@/lib/firebase/admin";
 import { getItemServer } from "@/lib/data/inventory.server";
-import { ItemDetail } from "@/components/feature/inventory/ItemDetail";
+import {
+  ItemDetail,
+  type ItemDetailDeliveryOrder,
+} from "@/components/feature/inventory/ItemDetail";
 
 type RouteProps = { params: Promise<{ itemId: string }> };
+
+function tsToIso(ts: unknown): string | null {
+  if (!ts) return null;
+  if (typeof (ts as { toDate?: () => Date }).toDate === "function") {
+    return (ts as { toDate: () => Date }).toDate().toISOString();
+  }
+  if (typeof ts === "string") return ts;
+  return null;
+}
+
+async function fetchLinkedDeliveryOrders(
+  doIds: string[],
+): Promise<ItemDetailDeliveryOrder[]> {
+  if (doIds.length === 0) return [];
+  const refs = doIds.map((id) =>
+    adminDb.collection("deliveryOrders").doc(id),
+  );
+  const snaps = await adminDb.getAll(...refs);
+  return snaps
+    .filter((s) => s.exists)
+    .map((s) => {
+      const d = s.data()!;
+      return {
+        id: s.id,
+        vendor: (d.vendor as string) ?? "",
+        uploadedAt: tsToIso(d.uploadedAt),
+      };
+    });
+}
 
 export async function generateMetadata({
   params,
@@ -35,5 +68,8 @@ export default async function ItemDetailPage({ params }: RouteProps) {
   if (!item) notFound();
   const session = await verifySession();
   const isAdmin = session?.role === "admin";
-  return <ItemDetail item={item} isAdmin={isAdmin} />;
+  const deliveryOrders = await fetchLinkedDeliveryOrders(item.deliveryOrderIds);
+  return (
+    <ItemDetail item={item} isAdmin={isAdmin} deliveryOrders={deliveryOrders} />
+  );
 }

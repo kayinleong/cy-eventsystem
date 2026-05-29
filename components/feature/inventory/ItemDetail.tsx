@@ -12,7 +12,7 @@
 // later mutations re-render automatically.
 
 import Link from "next/link";
-import { Edit } from "lucide-react";
+import { Edit, FileText } from "lucide-react";
 
 import {
   Card,
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/feature/status/StatusBadge";
 import {
   statusToTone,
@@ -33,12 +34,20 @@ import { ItemHistoryTab } from "./ItemHistoryTab";
 import { PrintLabelButton } from "./PrintLabelButton";
 import { RetireItemButton } from "./RetireItemButton";
 
+export type ItemDetailDeliveryOrder = {
+  id: string;
+  vendor: string;
+  uploadedAt: string | null;
+};
+
 export function ItemDetail({
   item,
   isAdmin,
+  deliveryOrders = [],
 }: {
   item: InventoryItem;
   isAdmin: boolean;
+  deliveryOrders?: ItemDetailDeliveryOrder[];
 }) {
   const stockCards: { label: string; value: number }[] = [
     { label: "Total", value: item.totalQty },
@@ -140,6 +149,37 @@ export function ItemDetail({
               <dd>
                 {item.notes || (
                   <span className="text-muted-foreground">—</span>
+                )}
+              </dd>
+            </div>
+            <div className="md:col-span-2">
+              <dt className="text-muted-foreground">Delivery orders</dt>
+              <dd className="mt-1">
+                {deliveryOrders.length === 0 ? (
+                  <span className="text-muted-foreground">—</span>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {deliveryOrders.map((d) => (
+                      <Link
+                        key={d.id}
+                        href={`/delivery-orders/${d.id}`}
+                        className="inline-flex"
+                      >
+                        <Badge
+                          variant="secondary"
+                          className="gap-2 hover:bg-muted"
+                        >
+                          <FileText className="size-3" />
+                          <span>{d.vendor || "Delivery order"}</span>
+                          {d.uploadedAt ? (
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(d.uploadedAt).toLocaleDateString()}
+                            </span>
+                          ) : null}
+                        </Badge>
+                      </Link>
+                    ))}
+                  </div>
                 )}
               </dd>
             </div>
