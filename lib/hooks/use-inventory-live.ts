@@ -65,6 +65,9 @@ function toItem(d: QueryDocumentSnapshot): InventoryItem {
     updatedAt: tsToIso(data.updatedAt) ?? new Date(0).toISOString(),
     createdBy: data.createdBy ?? "",
     updatedBy: data.updatedBy ?? "",
+    deliveryOrderIds: Array.isArray(data.deliveryOrderIds)
+      ? data.deliveryOrderIds
+      : [],
   };
 }
 

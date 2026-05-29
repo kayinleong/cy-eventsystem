@@ -56,6 +56,15 @@ service cloud.firestore {
         && request.resource.data.availableQty <= request.resource.data.totalQty;
     }
 
+    // -------- deliveryOrders (quick-kayinleong-001) --------
+    // Admin-only create via Server Action; immutable in v1 (no update / delete).
+    // Any signed-in user can read so staff can follow an item back to its DO.
+    match /deliveryOrders/{doId} {
+      allow get, list: if isSignedIn();
+      allow create: if isAdmin();
+      allow update, delete: if false;
+    }
+
     // -------- events (EVT-01..09) --------
     match /events/{eventId} {
       allow read: if isSignedIn() && isMember(resource);

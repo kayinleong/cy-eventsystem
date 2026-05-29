@@ -47,4 +47,9 @@ export type InventoryItem = {
   updatedAt: string;
   createdBy: string; // uid
   updatedBy: string;
+  // quick-kayinleong-001 — back-reference to deliveryOrders/{doId} records
+  // that brought stock in for this item. Server-managed (FieldValue.arrayUnion
+  // inside createDeliveryOrder's runTransaction); never user-editable from
+  // ItemForm.
+  deliveryOrderIds: string[];
 };

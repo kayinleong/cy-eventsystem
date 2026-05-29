@@ -75,6 +75,7 @@ export async function createItem(
         location: data.location ?? "",
         notes: data.notes ?? "",
         lifecycleState: "available",
+        deliveryOrderIds: [],
         lowStockThreshold: data.lowStockThreshold ?? 0,
         lowStockOrderedAt: null,
         photoUrl: data.photoUrl ?? null,

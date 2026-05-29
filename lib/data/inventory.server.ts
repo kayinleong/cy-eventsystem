@@ -65,6 +65,7 @@ function toItem(snap: FirebaseFirestore.DocumentSnapshot): InventoryItem {
     updatedAt: tsToIso(d.updatedAt) ?? new Date(0).toISOString(),
     createdBy: d.createdBy ?? "",
     updatedBy: d.updatedBy ?? "",
+    deliveryOrderIds: Array.isArray(d.deliveryOrderIds) ? d.deliveryOrderIds : [],
   };
 }
 

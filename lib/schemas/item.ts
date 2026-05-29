@@ -45,6 +45,9 @@ export const ItemSchema = z
     updatedAt: z.string(),
     createdBy: z.string(),
     updatedBy: z.string(),
+    // Server-managed back-reference; defaults to [] so existing items
+    // without the field read cleanly.
+    deliveryOrderIds: z.array(z.string()).default([]),
   })
   .refine(
     // ARCHITECTURE.md: availableQty is a projection; outQty + damagedQty are
