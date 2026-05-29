@@ -1,10 +1,11 @@
-// Phase 1 — "Print label" Dialog with @media print chrome-hiding.
+// "Print label" Dialog with a format picker + @media print chrome-hiding.
 //
 // REQUIREMENTS:
-//   - INV-10 — admins (and staff for visibility) can preview + print a QR label.
+//   - INV-10 — admins (and staff for visibility) can preview + print a label.
 //
-// UI-SPEC pattern: print preview hides surrounding chrome via @media print
-// CSS scoped to the dialog's `#print-label` block, then calls window.print().
+// quick-kayinleong-001: format picker (QR / Code 128 / Code 39 / EAN-13).
+// Pre-validates SKU per format via canEncode() and disables Print + replaces
+// the canvas with a muted hint when the SKU can't encode in the chosen format.
 
 "use client";
 
@@ -19,6 +20,15 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { LABEL_FORMATS, canEncode, type BarcodeFormat } from "@/lib/labels";
 import { LabelPreview } from "./LabelPreview";
 
 export function PrintLabelButton({
@@ -29,6 +39,8 @@ export function PrintLabelButton({
   name: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [format, setFormat] = useState<BarcodeFormat>("qrcode");
+  const check = canEncode(sku, format);
 
   function doPrint() {
     if (typeof window === "undefined") return;
@@ -38,9 +50,9 @@ export function PrintLabelButton({
   return (
     <>
       {/*
-        PHASE 1: scoped print styles — when @media print is active, hide all
-        page chrome and only show the #print-label block. The block is fixed
-        center-screen so the printed page contains just the QR + SKU + name.
+        Scoped print styles — when @media print is active, hide all page
+        chrome and only show the #print-label block. The block is fixed
+        center-screen so the printed page contains just the label + SKU + name.
       */}
       <style>{`
         @media print {
@@ -65,21 +77,47 @@ export function PrintLabelButton({
         </DialogTrigger>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>QR label</DialogTitle>
+            <DialogTitle>Print label</DialogTitle>
           </DialogHeader>
-          <div
-            id="print-label"
-            className="flex flex-col items-center gap-2 py-4"
-          >
-            <LabelPreview value={sku} />
-            <p className="font-mono text-sm">{sku}</p>
-            <p className="text-sm text-muted-foreground">{name}</p>
+          <div className="space-y-2">
+            <Label htmlFor="label-format">Format</Label>
+            <Select
+              value={format}
+              onValueChange={(v) => setFormat(v as BarcodeFormat)}
+            >
+              <SelectTrigger id="label-format" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LABEL_FORMATS.map((f) => (
+                  <SelectItem key={f.value} value={f.value}>
+                    {f.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
+          {check.ok ? (
+            <div
+              id="print-label"
+              className="flex flex-col items-center gap-2 py-4"
+            >
+              <LabelPreview value={sku} format={format} />
+              <p className="font-mono text-sm">{sku}</p>
+              <p className="text-sm text-muted-foreground">{name}</p>
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
+              {check.reason}
+            </div>
+          )}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setOpen(false)}>
               Close
             </Button>
-            <Button onClick={doPrint}>Print</Button>
+            <Button onClick={doPrint} disabled={!check.ok}>
+              Print
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
