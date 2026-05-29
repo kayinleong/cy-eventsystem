@@ -38,6 +38,7 @@ export default async function EditItemPage({ params }: RouteProps) {
           category: item.category,
           totalQty: item.totalQty,
           unit: item.unit,
+          location: item.location,
           photoUrl: item.photoUrl ?? "",
           notes: item.notes,
           lowStockThreshold: item.lowStockThreshold,

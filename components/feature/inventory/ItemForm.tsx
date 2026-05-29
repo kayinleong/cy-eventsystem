@@ -91,6 +91,7 @@ export function ItemForm(props: ItemFormProps) {
         category: "Audio",
         totalQty: 0,
         unit: "pcs",
+        location: "",
         photoUrl: "",
         notes: "",
         lowStockThreshold: 0,
@@ -115,6 +116,7 @@ export function ItemForm(props: ItemFormProps) {
           category: values.category,
           totalQty: values.totalQty,
           unit: values.unit ?? "pcs",
+          location: values.location ?? "",
           notes: values.notes ?? "",
           lowStockThreshold: values.lowStockThreshold ?? 0,
           photoUrl: photoUrl ?? null,
@@ -141,6 +143,7 @@ export function ItemForm(props: ItemFormProps) {
           name: values.name,
           category: values.category,
           unit: values.unit ?? "pcs",
+          location: values.location ?? "",
           notes: values.notes ?? "",
           lowStockThreshold: values.lowStockThreshold ?? 0,
           photoUrl: photoUrl ?? null,
@@ -285,6 +288,23 @@ export function ItemForm(props: ItemFormProps) {
             errors={
               errors.lowStockThreshold
                 ? [{ message: errors.lowStockThreshold.message }]
+                : undefined
+            }
+          />
+        </Field>
+
+        <Field data-invalid={!!errors.location}>
+          <FieldLabel htmlFor="item-location">Location</FieldLabel>
+          <Input
+            id="item-location"
+            placeholder="e.g. Warehouse A, Shelf 3"
+            aria-invalid={!!errors.location}
+            {...register("location")}
+          />
+          <FieldError
+            errors={
+              errors.location
+                ? [{ message: errors.location.message }]
                 : undefined
             }
           />

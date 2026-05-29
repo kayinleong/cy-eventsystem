@@ -54,6 +54,7 @@ function toItem(snap: FirebaseFirestore.DocumentSnapshot): InventoryItem {
     outQty: d.outQty ?? 0,
     damagedQty: d.damagedQty ?? 0,
     unit: d.unit ?? "pcs",
+    location: d.location ?? "",
     photoUrl: d.photoUrl ?? null,
     notes: d.notes ?? "",
     lifecycleState: (d.lifecycleState ?? "available") as ItemLifecycleState,

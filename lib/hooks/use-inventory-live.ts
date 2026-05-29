@@ -54,6 +54,7 @@ function toItem(d: QueryDocumentSnapshot): InventoryItem {
     outQty: data.outQty ?? 0,
     damagedQty: data.damagedQty ?? 0,
     unit: data.unit ?? "pcs",
+    location: data.location ?? "",
     photoUrl: data.photoUrl ?? null,
     notes: data.notes ?? "",
     lifecycleState: (data.lifecycleState ?? "available") as ItemLifecycleState,

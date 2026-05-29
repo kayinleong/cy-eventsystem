@@ -120,6 +120,14 @@ export function ItemDetail({
         <TabsContent value="details" className="space-y-3 pt-4">
           <dl className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
             <div>
+              <dt className="text-muted-foreground">Location</dt>
+              <dd>
+                {item.location || (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </dd>
+            </div>
+            <div>
               <dt className="text-muted-foreground">Unit</dt>
               <dd>{item.unit}</dd>
             </div>

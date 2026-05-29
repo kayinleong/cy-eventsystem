@@ -24,6 +24,9 @@ export type InventoryItem = {
   // Tracked for the `damaged` lifecycle state per REQUIREMENTS.md INV-09.
   damagedQty: number;
   unit: string; // "pcs" | "set" | etc.
+  // Free-text storage location (e.g. "Warehouse A, Shelf 3"). Empty string
+  // when unset. Capped at 100 chars by ItemSchema.
+  location: string;
   photoUrl: string | null;
   notes: string;
   lifecycleState: ItemLifecycleState;
