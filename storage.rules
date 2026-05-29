@@ -33,15 +33,22 @@ service firebase.storage {
                    && request.resource.contentType.matches('image/.*');
     }
 
-    // quick-kayinleong-001 — Delivery Order documents (PDF / JPG / PNG).
-    // Same cross-service-rule limitation as items/photo.jpg: admin gate
-    // is enforced at the Server Action layer (requireAdmin in
-    // app/(app)/delivery-orders/actions.ts). Storage rule only enforces
-    // signed-in + size cap + content-type allowlist. 10MB cap covers
-    // multi-page scanned vendor PDFs.
-    match /delivery-orders/{doId}/document.{ext} {
+    // quick-kayinleong-001 / quick-kayinleong-002 — Delivery Order documents
+    // (PDF / JPG / PNG). Same cross-service-rule limitation as
+    // items/photo.jpg: admin gate is enforced at the Server Action layer
+    // (requireAdmin in app/(app)/delivery-orders/actions.ts). Storage rule
+    // only enforces signed-in + filename shape + size cap + content-type
+    // allowlist. 10MB cap covers multi-page scanned vendor PDFs.
+    //
+    // quick-kayinleong-002 fix: Firebase Storage rules don't support
+    // extension globbing inside a path segment (the previous
+    // `document.{ext}` form matched a literal filename including curly
+    // braces, never real uploads → deny-by-default). Single-segment
+    // {fileName} + .matches() is the documented pattern.
+    match /delivery-orders/{doId}/{fileName} {
       allow read: if request.auth != null;
       allow write: if request.auth != null
+                   && fileName.matches('document\\.(pdf|jpg|png)')
                    && request.resource.size < 10 * 1024 * 1024
                    && (request.resource.contentType == 'application/pdf'
                        || request.resource.contentType == 'image/jpeg'

@@ -23,6 +23,7 @@
 | # | Description | Date | Commits | Directory |
 |---|-------------|------|---------|-----------|
 | quick-kayinleong-001 | Barcode format picker + item location + DO upload (minimal slice). Photo skipped — already shipped. | 2026-05-29 | c5082df, ee76b65, 31a4d70, a20188a | [quick-kayinleong-001](./quick/quick-kayinleong-001/) |
+| quick-kayinleong-002 | Fix DO Storage rule path-glob — `document.{ext}` is not valid Firebase path syntax; rewrite as `{fileName}` + `.matches()`. **Requires `firebase deploy --only storage` to take effect.** | 2026-05-29 | (pending commit) | [quick-kayinleong-002](./quick/quick-kayinleong-002/) |
 
 **v1 COMPLETE 2026-05-27 (verbatim from prior session).** Both phases of the locked 2-phase roadmap shipped. cy-eventsystem v1 is shippable pending PR review. Developer should review the closure commit (`docs(phase-kayinleong-02): Phase 2 COMPLETE — verification gate PASS, status done`) and push to remote, then open PR for human review per global CLAUDE.md "AI-authored code needs independent human review". PR description should include claim ID `phase-kayinleong-02`, regression report excerpt from CLAIM.md `## Verification` section, links to `audit-server-actions.md` + `rules-audit-final.md`, and the list of UI surface amendments (D-15 photo + D-17 cursor URLs). Tag v1.0.0 release when PR merges.
 
