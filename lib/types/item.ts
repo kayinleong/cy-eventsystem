@@ -17,6 +17,11 @@ export type InventoryItem = {
   id: string; // doc id; equals SKU per PROJECT.md key decision #14
   name: string;
   sku: string;
+  /**
+   * Manufacturer / physical barcode value. Empty string when not set.
+   * Used as label payload and secondary scan-resolution key.
+   */
+  externalBarcode: string;
   category: ItemCategory;
   totalQty: number;
   availableQty: number;

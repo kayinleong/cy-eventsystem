@@ -27,6 +27,7 @@ export const ItemSchema = z
       .string()
       .min(1, "SKU is required.")
       .regex(/^[A-Z0-9-]+$/i, "Letters, digits, hyphens only."),
+    externalBarcode: z.string().max(100).default(""),
     category: ItemCategoryEnum,
     totalQty: z.number().int().nonnegative(),
     availableQty: z.number().int().nonnegative(),
@@ -75,6 +76,7 @@ export const ItemFormSchema = z.object({
   unit: z.string().min(1).default("pcs"),
   location: z.string().max(100).default(""),
   brand: z.string().max(100).default(""),
+  externalBarcode: z.string().max(100).default(""),
   // Allow empty string for "no photo" — Zod 4 union of url-or-empty.
   photoUrl: z.url().nullable().or(z.literal("")),
   notes: z.string().max(2000).default(""),
@@ -118,6 +120,7 @@ export const CreateItemSchema = z.object({
   unit: z.string().min(1).default("pcs"),
   location: z.string().max(100).default(""),
   brand: z.string().max(100).default(""),
+  externalBarcode: z.string().max(100).optional(),
   notes: z.string().max(2000).default(""),
   lowStockThreshold: z.number().int().nonnegative().default(0),
   photoUrl: z.url().nullable().optional(),
@@ -131,6 +134,7 @@ export const UpdateItemSchema = z.object({
   unit: z.string().min(1).optional(),
   location: z.string().max(100).optional(),
   brand: z.string().max(100).optional(),
+  externalBarcode: z.string().max(100).optional(),
   notes: z.string().max(2000).optional(),
   lowStockThreshold: z.number().int().nonnegative().optional(),
   photoUrl: z.url().nullable().optional(),
