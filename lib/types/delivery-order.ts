@@ -31,6 +31,8 @@ export type DeliveryOrder = {
   /** Populated for checkout-sourced DOs; null for manual uploads */
   eventId: string | null;
   itemIds: string[];
+  /** Group barcode IDs generated from this checkout DO (empty for manual DOs) */
+  checkoutGroupIds: string[];
   notes: string;
   uploadedAt: string;
   uploadedBy: string;

@@ -33,6 +33,7 @@ import {
   createCheckoutGroupAction,
   type CreateCheckoutGroupResult,
 } from "@/app/(app)/events/[eventId]/checkout/actions";
+import { addGroupsToDOAction } from "@/app/(app)/delivery-orders/actions";
 import type { CommitSuccessPayload, ScanCartLine } from "@/components/feature/scan/scan-session";
 import { CheckoutChecklistDialog } from "./CheckoutChecklistDialog";
 import { CheckoutDOPrintDialog } from "./CheckoutDOPrintDialog";
@@ -78,6 +79,8 @@ type CheckoutGroupDialogProps = {
   payload: CommitSuccessPayload;
   eventName: string;
   eventStartDate: string; // ISO string — threaded from checkout-client.tsx event.startDate
+  /** Returns the DO id created during this checkout (may be null if DO creation is still in-flight) */
+  getDoId: () => string | null;
   onDone: () => void;
 };
 
@@ -87,6 +90,7 @@ export function CheckoutGroupDialog({
   payload,
   eventName,
   eventStartDate,
+  getDoId,
   onDone,
 }: CheckoutGroupDialogProps) {
   const [step, setStep] = useState<1 | 2>(1);
@@ -160,6 +164,15 @@ export function CheckoutGroupDialog({
       label: r.label,
       itemLines: r.lines,
     }));
+
+    // Link generated group IDs back to the checkout DO (best-effort; non-blocking).
+    const doId = getDoId();
+    if (doId) {
+      addGroupsToDOAction({ doId, groupIds: generated.map((g) => g.groupId) }).catch(
+        () => { /* silent — DO linkage is best-effort */ },
+      );
+    }
+
     setGroups(generated);
     setStep(2);
   }

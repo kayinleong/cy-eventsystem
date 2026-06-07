@@ -28,6 +28,7 @@ type DoDetail = {
   sourceType: "manual" | "checkout";
   eventId: string | null;
   itemIds: string[];
+  checkoutGroupIds: string[];
   notes: string;
   uploadedAt: string | null;
   uploadedBy: string;
@@ -58,6 +59,7 @@ async function fetchDeliveryOrder(doId: string): Promise<DoDetail | null> {
     sourceType: (data.sourceType as "manual" | "checkout") ?? "manual",
     eventId: (data.eventId as string | null) ?? null,
     itemIds: Array.isArray(data.itemIds) ? (data.itemIds as string[]) : [],
+    checkoutGroupIds: Array.isArray(data.checkoutGroupIds) ? (data.checkoutGroupIds as string[]) : [],
     notes: (data.notes as string) ?? "",
     uploadedAt: tsToIso(data.uploadedAt),
     uploadedBy: (data.uploadedBy as string) ?? "",
@@ -210,6 +212,25 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
           )}
         </CardContent>
       </Card>
+
+      {doc.checkoutGroupIds.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">
+              Group Barcodes ({doc.checkoutGroupIds.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y divide-border">
+              {doc.checkoutGroupIds.map((gid) => (
+                <li key={gid} className="py-1.5 font-mono text-xs text-muted-foreground break-all">
+                  {gid}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {doc.notes ? (
         <Card>

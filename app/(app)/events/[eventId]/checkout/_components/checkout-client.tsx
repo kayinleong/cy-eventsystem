@@ -34,7 +34,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -73,9 +73,9 @@ function CheckoutBody() {
 
 export function CheckoutClient({ event }: { event: EventDoc }) {
   const router = useRouter();
-  const [groupPayload, setGroupPayload] = useState<CommitSuccessPayload | null>(
-    null,
-  );
+  const [groupPayload, setGroupPayload] = useState<CommitSuccessPayload | null>(null);
+  // Store the DO id so CheckoutGroupDialog can link generated group barcodes back to it.
+  const doIdRef = useRef<string | null>(null);
 
   return (
     <>
@@ -83,8 +83,8 @@ export function CheckoutClient({ event }: { event: EventDoc }) {
         initialMode="checkout"
         initialEvent={event}
         onCommitSuccess={(payload) => {
+          doIdRef.current = null; // reset for this checkout
           setGroupPayload(payload);
-          // Fire DO creation in the background — non-blocking.
           createCheckoutDeliveryOrderAction({
             eventId: event.id,
             eventName: event.name,
@@ -92,10 +92,9 @@ export function CheckoutClient({ event }: { event: EventDoc }) {
             txIds: payload.txIds,
           }).then((result) => {
             if (result.ok) {
+              doIdRef.current = result.doId;
               toast.success("Delivery order created");
             }
-            // Silent on failure — DO creation is best-effort from the client
-            // perspective; the checkout already committed.
           });
         }}
       >
@@ -118,6 +117,7 @@ export function CheckoutClient({ event }: { event: EventDoc }) {
           payload={groupPayload}
           eventName={event.name}
           eventStartDate={event.startDate}
+          getDoId={() => doIdRef.current}
           onDone={() => {
             setGroupPayload(null);
             router.push(`/events/${event.id}`);

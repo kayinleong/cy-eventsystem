@@ -182,3 +182,23 @@ export async function createCheckoutDeliveryOrderAction(input: {
     return { ok: false, error: (err as Error).message };
   }
 }
+
+// ---- addGroupsToDOAction ----
+// After checkout group barcodes are generated, link them back to the DO.
+// Called from CheckoutGroupDialog once all createCheckoutGroupAction calls succeed.
+export async function addGroupsToDOAction(input: {
+  doId: string;
+  groupIds: string[];
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireSession();
+  if (!input.doId || input.groupIds.length === 0) return { ok: true };
+  try {
+    await adminDb.collection("deliveryOrders").doc(input.doId).update({
+      checkoutGroupIds: FieldValue.arrayUnion(...input.groupIds),
+    });
+    revalidatePath(`/delivery-orders/${input.doId}`);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
+}
