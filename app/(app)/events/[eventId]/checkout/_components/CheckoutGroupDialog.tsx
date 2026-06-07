@@ -34,6 +34,8 @@ import {
   type CreateCheckoutGroupResult,
 } from "@/app/(app)/events/[eventId]/checkout/actions";
 import type { CommitSuccessPayload, ScanCartLine } from "@/components/feature/scan/scan-session";
+import { CheckoutChecklistDialog } from "./CheckoutChecklistDialog";
+import { CheckoutDOPrintDialog } from "./CheckoutDOPrintDialog";
 
 // ---- pure helper functions ----
 
@@ -66,6 +68,7 @@ type GeneratedGroup = {
 type CheckoutGroupDialogProps = {
   payload: CommitSuccessPayload;
   eventName: string;
+  eventStartDate: string; // ISO string — threaded from checkout-client.tsx event.startDate
   onDone: () => void;
 };
 
@@ -74,6 +77,7 @@ type CheckoutGroupDialogProps = {
 export function CheckoutGroupDialog({
   payload,
   eventName,
+  eventStartDate,
   onDone,
 }: CheckoutGroupDialogProps) {
   const [step, setStep] = useState<1 | 2>(1);
@@ -210,6 +214,23 @@ export function CheckoutGroupDialog({
                   />
                 </div>
               ))}
+            </div>
+
+            {/* Documents section */}
+            <div className="space-y-2 border-t pt-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Documents</p>
+              <div className="flex flex-wrap gap-2">
+                <CheckoutChecklistDialog
+                  payload={payload}
+                  eventName={eventName}
+                  eventStartDate={eventStartDate}
+                />
+                <CheckoutDOPrintDialog
+                  payload={payload}
+                  eventName={eventName}
+                  eventStartDate={eventStartDate}
+                />
+              </div>
             </div>
 
             <div className="flex justify-end">

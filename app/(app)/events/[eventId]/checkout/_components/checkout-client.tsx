@@ -97,6 +97,7 @@ export function CheckoutClient({ event }: { event: EventDoc }) {
         <CheckoutGroupDialog
           payload={groupPayload}
           eventName={event.name}
+          eventStartDate={event.startDate}
           onDone={() => {
             setGroupPayload(null);
             router.push(`/events/${event.id}`);
