@@ -10,7 +10,6 @@ import { FileText } from "lucide-react";
 
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { requireSession } from "@/lib/auth/dal";
 import { adminDb } from "@/lib/firebase/admin";
@@ -34,7 +33,7 @@ type DoDetail = {
   uploadedBy: string;
 };
 
-type ItemSummary = { id: string; name: string; sku: string };
+type ItemSummary = { id: string; name: string; sku: string; location: string };
 
 function tsToIso(ts: unknown): string | null {
   if (!ts) return null;
@@ -77,6 +76,7 @@ async function fetchItemSummaries(itemIds: string[]): Promise<ItemSummary[]> {
         id: s.id,
         name: (d.name as string) ?? s.id,
         sku: (d.sku as string) ?? s.id,
+        location: (d.location as string) ?? "",
       };
     });
 }
@@ -187,22 +187,26 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
               No linked items available.
             </p>
           ) : (
-            <div className="flex flex-wrap gap-2">
+            <ul className="divide-y divide-border">
               {items.map((item) => (
-                <Link
-                  key={item.id}
-                  href={`/inventory/${item.id}`}
-                  className="inline-flex"
-                >
-                  <Badge variant="secondary" className="gap-2 hover:bg-muted">
-                    <span>{item.name}</span>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {item.sku}
-                    </span>
-                  </Badge>
-                </Link>
+                <li key={item.id} className="py-2 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/inventory/${item.id}`}
+                      className="text-sm font-medium hover:underline"
+                    >
+                      {item.name}
+                    </Link>
+                    <p className="text-xs text-muted-foreground font-mono">{item.sku}</p>
+                    {item.location ? (
+                      <p className="text-xs text-muted-foreground">
+                        {item.location}
+                      </p>
+                    ) : null}
+                  </div>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </CardContent>
       </Card>

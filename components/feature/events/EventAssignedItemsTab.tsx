@@ -13,15 +13,84 @@
 // The simple "did any check-in close this checkout?" model; partial returns
 // aren't expected in v1 (Phase 2 02-09 check-in flow returns the full
 // checkout qty per line).
+//
+// quick-kayinleong-010: also subscribes to a secondary per-item snapshot to
+// show current location alongside each checked-out item.
 
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { PackageOpen } from "lucide-react";
+import {
+  collection,
+  query,
+  where,
+  documentId,
+  onSnapshot,
+  type QueryDocumentSnapshot,
+} from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 
+import { auth, db } from "@/lib/firebase/client";
 import { useTransactionsLive } from "@/lib/hooks/use-transactions-live";
 import { EmptyState } from "@/components/ui/empty-state";
+
+// Small helper: subscribes to inventory docs for the given item IDs
+// and returns a map of itemId → location string.
+// Uses where(documentId(), "in", ids) — Firestore "in" limit is 30 per query.
+// v1 events have well under 30 distinct item IDs in open checkouts.
+//
+// The effect is keyed by a sorted-join of ids. When ids is empty, the effect
+// returns without subscribing; the map stays at its initial empty state.
+// setState is only called inside the async onSnapshot callback (not
+// synchronously in the effect body), which satisfies react-hooks/set-state-in-effect.
+function useItemLocations(itemIds: string[]): Map<string, string> {
+  const [locationMap, setLocationMap] = useState<Map<string, string>>(
+    new Map(),
+  );
+
+  // Stable key for the effect dep — join sorted IDs into a string.
+  // Computed inline so it's a simple identifier in the dep array.
+  const idsKey = itemIds.slice().sort().join(",");
+
+  useEffect(() => {
+    if (!idsKey) return; // no ids — leave map as-is (stays empty on first render)
+
+    // Parse the stable key back into the IDs for the Firestore query.
+    const ids = idsKey.split(",");
+    let unsubSnap: (() => void) | null = null;
+
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (unsubSnap) {
+        unsubSnap();
+        unsubSnap = null;
+      }
+      if (!user) return;
+
+      const q = query(
+        collection(db, "inventory"),
+        where(documentId(), "in", ids),
+      );
+      // setState called inside async callback — not synchronous in effect body.
+      unsubSnap = onSnapshot(q, (snap) => {
+        const map = new Map<string, string>();
+        snap.docs.forEach((d: QueryDocumentSnapshot) => {
+          const data = d.data();
+          map.set(d.id, (data.location as string) ?? "");
+        });
+        setLocationMap(map);
+      });
+    });
+
+    return () => {
+      if (unsubSnap) unsubSnap();
+      unsubAuth();
+    };
+  }, [idsKey]);
+
+  return locationMap;
+}
 
 export function EventAssignedItemsTab({ eventId }: { eventId: string }) {
   // Subscribe to ALL transactions for this event so we can split into
@@ -39,6 +108,14 @@ export function EventAssignedItemsTab({ eventId }: { eventId: string }) {
       (t) => t.type === "checkout" && !checkedInParents.has(t.id),
     );
   }, [allTxs]);
+
+  // Collect distinct itemIds from open checkouts for the location lookup.
+  const itemIds = useMemo(
+    () => Array.from(new Set(openCheckouts.map((t) => t.itemId))),
+    [openCheckouts],
+  );
+
+  const locationMap = useItemLocations(itemIds);
 
   if (openCheckouts.length === 0) {
     return (
@@ -67,6 +144,11 @@ export function EventAssignedItemsTab({ eventId }: { eventId: string }) {
             <p className="text-xs text-muted-foreground font-mono">
               {t.itemSku}
             </p>
+            {locationMap.get(t.itemId) ? (
+              <p className="text-xs text-muted-foreground">
+                {locationMap.get(t.itemId)}
+              </p>
+            ) : null}
           </div>
           <span className="text-sm">{t.qty} out</span>
         </li>
