@@ -8,6 +8,15 @@ export const DeliveryOrderContentTypeEnum = z.enum([
   "image/png",
 ]);
 
+// DO classification — distinguishes internal staff allocations from vendor
+// inbound and outbound shipments. Defaults to external-inbound (the most
+// common case: a vendor ships goods to us).
+export const DoTypeEnum = z.enum([
+  "internal",
+  "external-outbound",
+  "external-inbound",
+]);
+
 // Full DO doc — used by reads at the boundary and as the server-action
 // write payload (audit fields are added inside the action).
 export const DeliveryOrderSchema = z.object({
@@ -17,6 +26,7 @@ export const DeliveryOrderSchema = z.object({
   filePath: z.string().min(1),
   originalFilename: z.string().min(1).max(255),
   contentType: DeliveryOrderContentTypeEnum,
+  doType: DoTypeEnum.default("external-inbound"),
   itemIds: z.array(z.string().min(1)).min(1),
   notes: z.string().max(2000).default(""),
   uploadedAt: z.string(),
@@ -33,6 +43,7 @@ export const CreateDeliveryOrderSchema = z.object({
   filePath: z.string().min(1),
   originalFilename: z.string().min(1).max(255),
   contentType: DeliveryOrderContentTypeEnum,
+  doType: DoTypeEnum,
   itemIds: z.array(z.string().min(1)).min(1, "Pick at least one item."),
   notes: z.string().max(2000).default(""),
 });
@@ -41,6 +52,7 @@ export const CreateDeliveryOrderSchema = z.object({
 // itemIds + notes are the only react-hook-form-managed fields.
 export const DeliveryOrderFormSchema = z.object({
   vendor: z.string().min(1, "Vendor is required.").max(200),
+  doType: DoTypeEnum,
   itemIds: z.array(z.string().min(1)).min(1, "Pick at least one item."),
   notes: z.string().max(2000).default(""),
 });

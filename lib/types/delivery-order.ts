@@ -11,6 +11,11 @@ export type DeliveryOrderContentType =
   | "image/jpeg"
   | "image/png";
 
+export type DeliveryOrderType =
+  | "internal"
+  | "external-outbound"
+  | "external-inbound";
+
 export type DeliveryOrder = {
   id: string;
   vendor: string;
@@ -18,6 +23,7 @@ export type DeliveryOrder = {
   filePath: string;
   originalFilename: string;
   contentType: DeliveryOrderContentType;
+  doType: DeliveryOrderType;
   itemIds: string[];
   notes: string;
   uploadedAt: string;
