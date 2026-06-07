@@ -2,13 +2,13 @@
 // quick-kayinleong-009
 //
 // Opens a shadcn Dialog from a "Print Checklist" trigger button.
-// The print target div (#print-checklist) is isolated via @media print
-// using the same inline <style> injection pattern from PrintLabelButton
-// (NOT Tailwind print: utilities).
+// The preview renders inside the dialog; printing opens a new window
+// with a self-contained HTML document so the Radix Dialog portal
+// does not interfere with the print output.
 //
-// Unique print id: #print-checklist
-// Does NOT collide with: #print-label (PrintLabelButton), #print-do-document
-// (CheckoutDOPrintDialog). Only one Dialog can be open at a time.
+// quick-kayinleong-010: replaced @media print + window.print() with
+// window.open() approach to avoid Radix Dialog backdrop printing as a
+// separate page.
 
 "use client";
 
@@ -30,12 +30,84 @@ type CheckoutChecklistDialogProps = {
   eventStartDate: string; // ISO string
 };
 
+const PRINT_CSS = `
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: system-ui, -apple-system, sans-serif; font-size: 14px; padding: 32px; color: #111; }
+h1 { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+.meta { color: #555; font-size: 13px; margin-bottom: 16px; line-height: 1.6; }
+.badge { display: inline-block; border: 1px solid #ccc; border-radius: 4px; padding: 2px 8px; font-size: 12px; margin-bottom: 8px; }
+.badge.outbound { background: #f0f0f0; }
+table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+th { text-align: left; font-weight: 600; border-bottom: 2px solid #000; padding: 6px 4px; }
+td { border-bottom: 1px solid #ddd; padding: 6px 4px; }
+.right { text-align: right; }
+.total td { font-weight: 700; border-top: 2px solid #000; border-bottom: none; }
+.ref { margin-top: 16px; font-size: 11px; color: #999; }
+`;
+
 export function CheckoutChecklistDialog({
   payload,
   eventName,
   eventStartDate,
 }: CheckoutChecklistDialogProps) {
   const totalQty = payload.cart.reduce((sum, l) => sum + l.qty, 0);
+
+  function handlePrint() {
+    const dateStr = new Date(eventStartDate).toLocaleDateString();
+    const printedAt = new Date().toLocaleString();
+
+    const rows = payload.cart
+      .map(
+        (line) =>
+          `<tr>
+            <td>${line.itemName}</td>
+            <td>${line.itemSku}</td>
+            <td class="right">${line.qty}</td>
+          </tr>`,
+      )
+      .join("");
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Checkout Checklist — ${eventName}</title>
+  <style>${PRINT_CSS}</style>
+</head>
+<body>
+  <h1>Checkout Checklist</h1>
+  <div class="meta">
+    <div>Event: ${eventName}</div>
+    <div>Date: ${dateStr}</div>
+    <div>Printed at: ${printedAt}</div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Item Name</th>
+        <th>SKU</th>
+        <th class="right">Qty</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+      <tr class="total">
+        <td colspan="2">Total</td>
+        <td class="right">${totalQty}</td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>`;
+
+    const w = window.open("", "_blank", "width=900,height=700");
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    w.print();
+    w.close();
+  }
 
   return (
     <Dialog>
@@ -50,17 +122,8 @@ export function CheckoutChecklistDialog({
           <DialogTitle>Checkout Checklist Preview</DialogTitle>
         </DialogHeader>
 
-        {/* @media print isolation — injected inline per PrintLabelButton pattern */}
-        <style>{`
-          @media print {
-            body * { visibility: hidden !important; }
-            #print-checklist, #print-checklist * { visibility: visible !important; }
-            #print-checklist { position: absolute; inset: 0; padding: 24px; overflow: visible; }
-          }
-        `}</style>
-
-        {/* Print target */}
-        <div id="print-checklist" className="space-y-4">
+        {/* Preview — visible in the dialog before printing */}
+        <div className="space-y-4">
           <div>
             <h1 className="text-2xl font-bold">Checkout Checklist</h1>
             <p className="text-sm text-muted-foreground">
@@ -98,9 +161,9 @@ export function CheckoutChecklistDialog({
           </table>
         </div>
 
-        {/* Print button — outside the print target */}
+        {/* Print button — opens new window */}
         <div className="flex justify-end pt-2">
-          <Button onClick={() => window.print()}>Print</Button>
+          <Button onClick={handlePrint}>Print</Button>
         </div>
       </DialogContent>
     </Dialog>
