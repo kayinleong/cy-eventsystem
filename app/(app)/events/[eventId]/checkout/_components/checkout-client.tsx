@@ -25,26 +25,29 @@
 //   - CO-09 — 5 formats in ScannerWidget (qr_code, code_128, ean_13, upc_a, data_matrix)
 //   - CO-10 — ManualEntryInput's Enter handler IS the Bluetooth scanner handler
 //
-// On successful commit, ScanSessionProvider.commit() already calls
-// router.push(`/events/${selectedEvent.id}`) — which is the page the user
-// came from. So no extra success-redirect logic is needed here; the
-// substrate does it.
+// quick-kayinleong-006: After a successful commit, ScanSessionProvider
+// fires onCommitSuccess → CheckoutGroupDialog is shown. "Skip" or "Done"
+// both navigate to the event page via onDone (router.push + router.refresh).
 
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import {
   ScanSessionProvider,
   useScanSession,
+  type CommitSuccessPayload,
 } from "@/components/feature/scan/scan-session";
 import { ScannerWidget } from "@/components/feature/scan/ScannerWidget";
 import { ScanCartPanel } from "@/components/feature/scan/ScanCartPanel";
 import { ScanHeader } from "@/components/feature/scan/ScanHeader";
 import { ManualEntryInput } from "@/components/feature/scan/ManualEntryInput";
+import { CheckoutGroupDialog } from "./CheckoutGroupDialog";
 import type { EventDoc } from "@/lib/types/event";
 
 function CheckoutBody() {
@@ -64,20 +67,43 @@ function CheckoutBody() {
 }
 
 export function CheckoutClient({ event }: { event: EventDoc }) {
+  const router = useRouter();
+  const [groupPayload, setGroupPayload] = useState<CommitSuccessPayload | null>(
+    null,
+  );
+
   return (
-    <ScanSessionProvider initialMode="checkout" initialEvent={event}>
-      <div className="space-y-4">
-        <Button asChild variant="ghost" size="sm" className="-ml-2">
-          <Link href={`/events/${event.id}`}>
-            <ChevronLeft className="mr-1 size-4" /> Back to event
-          </Link>
-        </Button>
-        <PageHeader
-          title={`Check out · ${event.name}`}
-          description="Scan items to add them to this event's check-out cart."
+    <>
+      <ScanSessionProvider
+        initialMode="checkout"
+        initialEvent={event}
+        onCommitSuccess={(payload) => setGroupPayload(payload)}
+      >
+        <div className="space-y-4">
+          <Button asChild variant="ghost" size="sm" className="-ml-2">
+            <Link href={`/events/${event.id}`}>
+              <ChevronLeft className="mr-1 size-4" /> Back to event
+            </Link>
+          </Button>
+          <PageHeader
+            title={`Check out · ${event.name}`}
+            description="Scan items to add them to this event's check-out cart."
+          />
+          <CheckoutBody />
+        </div>
+      </ScanSessionProvider>
+
+      {groupPayload && (
+        <CheckoutGroupDialog
+          payload={groupPayload}
+          eventName={event.name}
+          onDone={() => {
+            setGroupPayload(null);
+            router.push(`/events/${event.id}`);
+            router.refresh();
+          }}
         />
-        <CheckoutBody />
-      </div>
-    </ScanSessionProvider>
+      )}
+    </>
   );
 }

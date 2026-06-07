@@ -85,6 +85,16 @@ export type ScanCartLine = {
   availableQty: number;
 };
 
+// quick-kayinleong-006 — payload passed to onCommitSuccess after a successful
+// checkout commit. Callers use this to show the group-barcode dialog before
+// navigating away. The cart snapshot is captured before clearing so the dialog
+// has the full item list even after the cart is reset.
+export type CommitSuccessPayload = {
+  cart: ScanCartLine[];
+  txIds: string[];
+  eventId: string;
+};
+
 // RES-03 — versioned sessionStorage key. Bump the suffix if the persisted
 // shape ever changes so old sessions invalidate cleanly instead of crashing
 // the hydration parse.
@@ -177,10 +187,15 @@ const Ctx = createContext<ScanSessionContextValue | null>(null);
 export function ScanSessionProvider({
   initialMode = "checkout",
   initialEvent = null,
+  onCommitSuccess,
   children,
 }: {
   initialMode?: ScanMode;
   initialEvent?: EventDoc | null;
+  // quick-kayinleong-006 — when provided, the caller handles post-commit
+  // navigation (e.g., showing the group-barcode dialog). When absent, the
+  // default router.push to the event page fires as before (/scan flow).
+  onCommitSuccess?: (payload: CommitSuccessPayload) => void;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -417,24 +432,35 @@ export function ScanSessionProvider({
         `${cart.length} ${cart.length === 1 ? "item" : "items"} checked out`,
       );
       // RES-03 — successful commit means there's no work-in-progress left.
-      // We clear the cart (the mirror useEffect would also unset the key,
-      // but the explicit removeItem ensures cross-tab listeners fire
-      // immediately even if React batches the state updates around the
-      // router.push that follows).
-      setCart([]);
+      // Capture the cart before clearing so the caller's onCommitSuccess
+      // callback (quick-kayinleong-006 group-barcode dialog) has the full
+      // item list even after the cart is reset.
+      const cartSnapshot = [...cart];
       clearPersisted();
-      // Defense-in-depth: revalidatePath has run server-side; refresh the
-      // current segment so the user sees the new outQty + audit feed when
-      // landing on /events/<id>.
-      router.push(`/events/${selectedEvent.id}`);
-      router.refresh();
+      setCart([]);
+
+      if (onCommitSuccess) {
+        // quick-kayinleong-006 — caller controls navigation (e.g., shows
+        // the group-barcode dialog first, then navigates on "Done"/"Skip").
+        onCommitSuccess({
+          cart: cartSnapshot,
+          txIds: result.txIds,
+          eventId: selectedEvent.id,
+        });
+      } else {
+        // Default path (e.g., /scan page without dialog): navigate directly
+        // to the event page. Defense-in-depth: revalidatePath has run
+        // server-side; refresh so the user sees the new outQty + audit feed.
+        router.push(`/events/${selectedEvent.id}`);
+        router.refresh();
+      }
     } else {
       // Phase 1 scope: /scan in checkin mode routes to the per-event check-in
       // screen (CI-02). Plan 02-09 wires the full check-in form.
       router.push(`/events/${selectedEvent.id}/checkin`);
     }
     setIsCommitting(false);
-  }, [selectedEvent, cart, mode, router]);
+  }, [selectedEvent, cart, mode, router, onCommitSuccess]);
 
   const value = useMemo<ScanSessionContextValue>(
     () => ({
