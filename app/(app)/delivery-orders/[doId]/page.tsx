@@ -218,7 +218,7 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
         </CardContent>
       </Card>
 
-      {(doc.itemLines.length > 0 || doc.checkoutGroupIds.length > 0) && (
+      {(doc.sourceType === "checkout" || doc.checkoutGroupIds.length > 0) && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">Actions</CardTitle>
@@ -228,6 +228,7 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
               vendor={doc.vendor}
               uploadedAt={doc.uploadedAt}
               itemLines={doc.itemLines}
+              fallbackItems={items}
               checkoutGroupIds={doc.checkoutGroupIds}
             />
           </CardContent>

@@ -1,8 +1,13 @@
 // DODetailActions — client island for DO detail page.
 // Handles:
-//   1. Print Checklist — window.open() with item lines (name, SKU, qty).
+//   1. Print Checklist — window.open() with item lines (name, SKU, qty if available).
 //   2. Print Delivery Order — window.open() with DO-style layout.
 //   3. Group barcode QR labels — one PrintLabelButton per checkoutGroupId.
+//
+// itemLines: populated for DOs created after the itemLines field was added —
+//   contains name, SKU, and qty per line.
+// fallbackItems: always populated — name, SKU, location from current inventory
+//   snapshot (used when itemLines is empty, e.g. older DOs).
 
 "use client";
 
@@ -24,11 +29,13 @@ td { border-bottom: 1px solid #ddd; padding: 6px 4px; }
 `;
 
 type ItemLine = { itemId: string; itemName: string; itemSku: string; qty: number };
+type FallbackItem = { id: string; name: string; sku: string; location: string };
 
 type DODetailActionsProps = {
   vendor: string;
   uploadedAt: string | null;
   itemLines: ItemLine[];
+  fallbackItems: FallbackItem[];
   checkoutGroupIds: string[];
 };
 
@@ -36,27 +43,57 @@ export function DODetailActions({
   vendor,
   uploadedAt,
   itemLines,
+  fallbackItems,
   checkoutGroupIds,
 }: DODetailActionsProps) {
-  const dateStr = uploadedAt
-    ? new Date(uploadedAt).toLocaleDateString()
-    : "—";
-  const totalQty = itemLines.reduce((s, l) => s + l.qty, 0);
+  const dateStr = uploadedAt ? new Date(uploadedAt).toLocaleDateString() : "—";
+  const hasQty = itemLines.length > 0;
 
-  function printChecklist() {
-    const rows = itemLines
+  // Build print rows from itemLines (with qty) or fallbackItems (no qty).
+  function buildRows(): string {
+    if (hasQty) {
+      return itemLines
+        .map(
+          (l) =>
+            `<tr><td>${l.itemName}</td><td>${l.itemSku}</td><td class="right">${l.qty}</td></tr>`,
+        )
+        .join("");
+    }
+    return fallbackItems
       .map(
-        (l) =>
-          `<tr><td>${l.itemName}</td><td>${l.itemSku}</td><td class="right">${l.qty}</td></tr>`,
+        (i) => `<tr><td>${i.name}</td><td>${i.sku}</td><td class="right">—</td></tr>`,
       )
       .join("");
-    const totalRow = `<tr class="total"><td colspan="2">Total</td><td class="right">${totalQty}</td></tr>`;
+  }
 
-    const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"/><title>Checklist — ${vendor}</title>
+  function buildTotalRow(): string {
+    if (!hasQty) return "";
+    const total = itemLines.reduce((s, l) => s + l.qty, 0);
+    return `<tr class="total"><td colspan="2">Total</td><td class="right">${total}</td></tr>`;
+  }
+
+  function openPrintWindow(title: string, body: string) {
+    const w = window.open("", "_blank", "width=900,height=700");
+    if (!w) {
+      alert("Pop-up blocked. Please allow pop-ups for this site and try again.");
+      return;
+    }
+    w.document.write(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"/><title>${title}</title>
 <style>${PRINT_CSS}</style></head>
-<body>
-<h1>Checkout Checklist</h1>
+<body>${body}</body></html>`);
+    w.document.close();
+    w.focus();
+    w.print();
+    w.close();
+  }
+
+  function printChecklist() {
+    const rows = buildRows();
+    const totalRow = buildTotalRow();
+    openPrintWindow(
+      `Checklist — ${vendor}`,
+      `<h1>Checkout Checklist</h1>
 <div class="meta">
   <div>Event / Vendor: ${vendor}</div>
   <div>Date: ${dateStr}</div>
@@ -65,31 +102,15 @@ export function DODetailActions({
 <table>
   <thead><tr><th>Item</th><th>SKU</th><th class="right">Qty</th></tr></thead>
   <tbody>${rows}${totalRow}</tbody>
-</table>
-</body></html>`;
-
-    const w = window.open("", "_blank", "width=900,height=700");
-    if (!w) return;
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    w.print();
-    w.close();
+</table>`,
+    );
   }
 
   function printDeliveryOrder() {
-    const rows = itemLines
-      .map(
-        (l) =>
-          `<tr><td>${l.itemName}</td><td>${l.itemSku}</td><td class="right">${l.qty}</td></tr>`,
-      )
-      .join("");
-
-    const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"/><title>Delivery Order — ${vendor}</title>
-<style>${PRINT_CSS}</style></head>
-<body>
-<h1>Delivery Order</h1>
+    const rows = buildRows();
+    openPrintWindow(
+      `Delivery Order — ${vendor}`,
+      `<h1>Delivery Order</h1>
 <span class="badge">External — Outbound</span>
 <div class="meta">
   <div>Event / Vendor: ${vendor}</div>
@@ -99,22 +120,16 @@ export function DODetailActions({
 <table>
   <thead><tr><th>Item</th><th>SKU</th><th class="right">Qty</th></tr></thead>
   <tbody>${rows}</tbody>
-</table>
-</body></html>`;
-
-    const w = window.open("", "_blank", "width=900,height=700");
-    if (!w) return;
-    w.document.write(html);
-    w.document.close();
-    w.focus();
-    w.print();
-    w.close();
+</table>`,
+    );
   }
+
+  const hasItems = hasQty || fallbackItems.length > 0;
 
   return (
     <div className="space-y-6">
-      {/* Print buttons — only shown when there are item lines with qty data */}
-      {itemLines.length > 0 && (
+      {/* Print buttons */}
+      {hasItems && (
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={printChecklist}>
             <FileText className="mr-2 size-4" />
@@ -124,16 +139,21 @@ export function DODetailActions({
             <Package className="mr-2 size-4" />
             Print Delivery Order
           </Button>
+          {!hasQty && (
+            <p className="w-full text-xs text-muted-foreground">
+              Quantities not available for this DO — printed without qty column.
+            </p>
+          )}
         </div>
       )}
 
-      {/* Group barcode labels */}
+      {/* Group barcode QR labels */}
       {checkoutGroupIds.length > 0 && (
         <div className="space-y-3">
           <p className="text-sm font-medium">
             Group Barcodes ({checkoutGroupIds.length})
           </p>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-col gap-3">
             {checkoutGroupIds.map((gid, idx) => (
               <div
                 key={gid}
@@ -145,7 +165,10 @@ export function DODetailActions({
                     {gid}
                   </p>
                 </div>
-                <PrintLabelButton sku={gid} name={`Group ${idx + 1} — ${vendor}`} />
+                <PrintLabelButton
+                  sku={gid}
+                  name={`Group ${idx + 1} — ${vendor}`}
+                />
               </div>
             ))}
           </div>
