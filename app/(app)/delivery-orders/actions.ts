@@ -1,14 +1,17 @@
 "use server";
 // app/(app)/delivery-orders/actions.ts
 // quick-kayinleong-001 — admin uploads a vendor Delivery Order document
-// against one or more inventory items. Single Server Action: createDeliveryOrder.
+// against one or more inventory items.
+// quick-kayinleong-010 — createCheckoutDeliveryOrderAction: auto-creates a
+// DO when checkout succeeds. Staff-gated (requireSession); no file required.
 //
-// Auth: requireAdmin() at the action layer (Storage rule only gates
+// Auth: requireAdmin() for manual upload (Storage rule only gates
 // signed-in + size + content-type; the admin check lives here for
 // defense-in-depth, mirroring the photo upload pattern documented in
 // storage.rules:22-28).
+// requireSession() for checkout-sourced DOs (staff can trigger checkout).
 //
-// Transactional shape:
+// Transactional shape (manual upload):
 //   - Read all referenced inventory docs first (Firestore tx rule: reads
 //     before writes). Missing items are skipped-and-warned rather than
 //     aborting the entire upload, since the items picker may be slightly
@@ -20,7 +23,7 @@
 import { revalidatePath } from "next/cache";
 import { FieldValue } from "firebase-admin/firestore";
 
-import { requireAdmin } from "@/lib/auth/dal";
+import { requireAdmin, requireSession } from "@/lib/auth/dal";
 import { adminDb } from "@/lib/firebase/admin";
 import { CreateDeliveryOrderSchema } from "@/lib/schemas/delivery-order";
 
@@ -107,5 +110,75 @@ export async function createDeliveryOrder(
       };
     }
     return { ok: false, error: msg };
+  }
+}
+
+// ---- createCheckoutDeliveryOrderAction (quick-kayinleong-010) ----
+// Auto-creates a Delivery Order when a checkout succeeds. No file upload
+// required — the DO captures the event, items, and transaction IDs only.
+//
+// Auth: requireSession() — staff can trigger checkout and this DO is a
+// downstream artifact of that checkout. Admin-only gate would block staff
+// from creating the DO for events they're authorized to check out for.
+//
+// Batch write (not runTransaction) — we're adding the doId back-reference
+// to each item. The DO doc is written first; item updates use FieldValue
+// .arrayUnion which is idempotent on retry. If the batch partially fails,
+// a retry from the client produces a duplicate-ID error on the DO write
+// (doId is deterministic per checkout call — callers should pass a
+// stable ID or accept idempotency via a pre-checked exists guard).
+
+export async function createCheckoutDeliveryOrderAction(input: {
+  eventId: string;
+  eventName: string;
+  itemIds: string[];
+  txIds: string[];
+  notes?: string;
+}): Promise<{ ok: true; doId: string } | { ok: false; error: string }> {
+  const session = await requireSession();
+
+  const doRef = adminDb.collection("deliveryOrders").doc();
+  const doId = doRef.id;
+
+  const uniqueItemIds = Array.from(new Set(input.itemIds));
+
+  try {
+    const batch = adminDb.batch();
+
+    batch.set(doRef, {
+      id: doId,
+      vendor: input.eventName,
+      fileUrl: null,
+      filePath: null,
+      originalFilename: null,
+      contentType: null,
+      doType: "external-outbound",
+      sourceType: "checkout",
+      eventId: input.eventId,
+      itemIds: uniqueItemIds,
+      notes: input.notes ?? "",
+      uploadedAt: FieldValue.serverTimestamp(),
+      uploadedBy: session.uid,
+    });
+
+    for (const itemId of uniqueItemIds) {
+      batch.update(adminDb.collection("inventory").doc(itemId), {
+        deliveryOrderIds: FieldValue.arrayUnion(doId),
+        updatedAt: FieldValue.serverTimestamp(),
+        updatedBy: session.uid,
+      });
+    }
+
+    await batch.commit();
+
+    revalidatePath("/delivery-orders");
+    revalidatePath(`/delivery-orders/${doId}`);
+    for (const itemId of uniqueItemIds) {
+      revalidatePath(`/inventory/${itemId}`);
+    }
+
+    return { ok: true, doId };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
   }
 }

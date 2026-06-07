@@ -22,10 +22,12 @@ type RouteProps = { params: Promise<{ doId: string }> };
 type DoDetail = {
   id: string;
   vendor: string;
-  fileUrl: string;
-  originalFilename: string;
-  contentType: string;
+  fileUrl: string | null;
+  originalFilename: string | null;
+  contentType: string | null;
   doType: DeliveryOrderType | null;
+  sourceType: "manual" | "checkout";
+  eventId: string | null;
   itemIds: string[];
   notes: string;
   uploadedAt: string | null;
@@ -50,10 +52,12 @@ async function fetchDeliveryOrder(doId: string): Promise<DoDetail | null> {
   return {
     id: snap.id,
     vendor: (data.vendor as string) ?? "",
-    fileUrl: (data.fileUrl as string) ?? "",
-    originalFilename: (data.originalFilename as string) ?? "",
-    contentType: (data.contentType as string) ?? "",
+    fileUrl: (data.fileUrl as string | null) ?? null,
+    originalFilename: (data.originalFilename as string | null) ?? null,
+    contentType: (data.contentType as string | null) ?? null,
     doType: (data.doType as DeliveryOrderType) ?? null,
+    sourceType: (data.sourceType as "manual" | "checkout") ?? "manual",
+    eventId: (data.eventId as string | null) ?? null,
     itemIds: Array.isArray(data.itemIds) ? (data.itemIds as string[]) : [],
     notes: (data.notes as string) ?? "",
     uploadedAt: tsToIso(data.uploadedAt),
@@ -110,18 +114,30 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
             <CardTitle className="text-sm">Document</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            <a
-              href={doc.fileUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 text-sm hover:underline"
-            >
-              <FileText className="size-4 text-muted-foreground" />
-              <span className="truncate" title={doc.originalFilename}>
-                {doc.originalFilename || "Open document"}
-              </span>
-            </a>
-            <p className="text-xs text-muted-foreground">{doc.contentType}</p>
+            {doc.fileUrl ? (
+              <>
+                <a
+                  href={doc.fileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 text-sm hover:underline"
+                >
+                  <FileText className="size-4 text-muted-foreground" />
+                  <span className="truncate" title={doc.originalFilename ?? undefined}>
+                    {doc.originalFilename || "Open document"}
+                  </span>
+                </a>
+                <p className="text-xs text-muted-foreground">{doc.contentType}</p>
+              </>
+            ) : doc.sourceType === "checkout" ? (
+              <p className="text-sm text-muted-foreground">
+                Auto-generated from checkout
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No document attached
+              </p>
+            )}
           </CardContent>
         </Card>
 

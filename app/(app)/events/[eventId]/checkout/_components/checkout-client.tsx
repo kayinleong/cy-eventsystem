@@ -28,6 +28,9 @@
 // quick-kayinleong-006: After a successful commit, ScanSessionProvider
 // fires onCommitSuccess → CheckoutGroupDialog is shown. "Skip" or "Done"
 // both navigate to the event page via onDone (router.push + router.refresh).
+//
+// quick-kayinleong-010: onCommitSuccess also fires createCheckoutDeliveryOrderAction
+// in the background. Toast fires on success; silent on failure (non-blocking).
 
 "use client";
 
@@ -35,6 +38,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -48,6 +52,7 @@ import { ScanCartPanel } from "@/components/feature/scan/ScanCartPanel";
 import { ScanHeader } from "@/components/feature/scan/ScanHeader";
 import { ManualEntryInput } from "@/components/feature/scan/ManualEntryInput";
 import { CheckoutGroupDialog } from "./CheckoutGroupDialog";
+import { createCheckoutDeliveryOrderAction } from "@/app/(app)/delivery-orders/actions";
 import type { EventDoc } from "@/lib/types/event";
 
 function CheckoutBody() {
@@ -77,7 +82,22 @@ export function CheckoutClient({ event }: { event: EventDoc }) {
       <ScanSessionProvider
         initialMode="checkout"
         initialEvent={event}
-        onCommitSuccess={(payload) => setGroupPayload(payload)}
+        onCommitSuccess={(payload) => {
+          setGroupPayload(payload);
+          // Fire DO creation in the background — non-blocking.
+          createCheckoutDeliveryOrderAction({
+            eventId: event.id,
+            eventName: event.name,
+            itemIds: payload.cart.map((l) => l.itemId),
+            txIds: payload.txIds,
+          }).then((result) => {
+            if (result.ok) {
+              toast.success("Delivery order created");
+            }
+            // Silent on failure — DO creation is best-effort from the client
+            // perspective; the checkout already committed.
+          });
+        }}
       >
         <div className="space-y-4">
           <Button asChild variant="ghost" size="sm" className="-ml-2">
