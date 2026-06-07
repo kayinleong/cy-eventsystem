@@ -13,7 +13,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ScanLine } from "lucide-react";
+import { ScanLine, X } from "lucide-react";
 import { Scanner } from "@yudiel/react-qr-scanner";
 
 import { Button } from "@/components/ui/button";
@@ -60,11 +60,22 @@ export function BarcodeFieldInput({
       </Button>
 
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="bottom" className="h-[70dvh]">
-          <SheetHeader>
+        <SheetContent side="bottom" className="h-[80dvh] flex flex-col">
+          <SheetHeader className="flex-row items-center justify-between shrink-0">
             <SheetTitle>Scan barcode</SheetTitle>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => setOpen(false)}
+              aria-label="Close scanner"
+            >
+              <X className="size-5" />
+            </Button>
           </SheetHeader>
-          <div className="mt-4 overflow-hidden rounded-md">
+          {/* Fixed-height container prevents the Scanner video from overflowing
+              the sheet and covering the close button. */}
+          <div className="flex-1 min-h-0 mt-4 overflow-hidden rounded-md">
             <Scanner
               formats={[
                 "qr_code",
@@ -74,6 +85,7 @@ export function BarcodeFieldInput({
                 "data_matrix",
               ]}
               paused={!open}
+              styles={{ container: { height: "100%" } }}
               onScan={(detections) => {
                 if (!detections.length) return;
                 const now = Date.now();
