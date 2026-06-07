@@ -58,7 +58,7 @@ function CheckoutBody() {
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="space-y-3">
           <ScannerWidget />
-          <ManualEntryInput onSubmit={(sku) => addLine(sku)} />
+          <ManualEntryInput onSubmit={async (sku) => { await addLine(sku); }} />
         </div>
         <ScanCartPanel />
       </div>

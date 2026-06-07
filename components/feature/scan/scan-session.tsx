@@ -67,6 +67,9 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { doc, getDoc } from "firebase/firestore";
+
+import { db } from "@/lib/firebase/client";
 
 import {
   commitCheckoutCartAction,
@@ -180,7 +183,7 @@ export type ScanSessionContextValue = {
   selectEvent: (event: EventDoc) => void;
   endSession: () => void;
   cart: ScanCartLine[];
-  addLine: (skuOrId: string) => { ok: true } | { ok: false; reason: string };
+  addLine: (skuOrId: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
   removeLine: (itemId: string) => void;
   setQty: (itemId: string, qty: number) => void;
   commit: () => Promise<void>;
@@ -308,7 +311,7 @@ export function ScanSessionProvider({
   }, []);
 
   const addLine = useCallback(
-    (skuOrId: string): { ok: true } | { ok: false; reason: string } => {
+    async (skuOrId: string): Promise<{ ok: true } | { ok: false; reason: string }> => {
       const trimmed = skuOrId.trim();
       if (!trimmed) return { ok: false, reason: "Empty scan." };
 
@@ -322,6 +325,18 @@ export function ScanSessionProvider({
         items.find((i) => i.externalBarcode !== "" && i.externalBarcode === trimmed);
 
       if (!item) {
+        // Guard: only in checkin mode — check if this is a checkoutGroups Firestore ID.
+        // Group barcodes are auto-IDs with no reliable format heuristic, so a Firestore
+        // probe is the only authoritative check (per quick-kayinleong-008 research).
+        if (mode === "checkin") {
+          const groupSnap = await getDoc(doc(db, "checkoutGroups", trimmed));
+          if (groupSnap.exists()) {
+            toast.error(
+              "Group barcodes cannot be used for check-in. Please scan individual item barcodes.",
+            );
+            return { ok: false, reason: "Group barcode" };
+          }
+        }
         // UI-SPEC "No scan match" copy verbatim.
         toast.error("Item not recognized", {
           description:

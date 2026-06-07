@@ -113,7 +113,7 @@ export function ScannerWidget({
     (eventRequired ? !selectedEvent : false) ||
     !!permissionError;
 
-  function handleScan(results: IDetectedBarcode[]) {
+  async function handleScan(results: IDetectedBarcode[]) {
     const value = results[0]?.rawValue;
     if (!value) return;
     const now = Date.now();
@@ -133,7 +133,7 @@ export function ScannerWidget({
     if (onScan) {
       onScan(value);
     } else {
-      addLine(value);
+      await addLine(value);
     }
   }
 

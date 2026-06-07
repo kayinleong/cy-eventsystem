@@ -85,7 +85,7 @@ function ScanInner() {
             <div className="space-y-3">
               <ScannerWidget />
               <ManualEntryInput
-                onSubmit={(sku) => addLine(sku)}
+                onSubmit={async (sku) => { await addLine(sku); }}
                 disabled={!selectedEvent}
               />
             </div>
