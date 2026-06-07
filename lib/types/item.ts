@@ -27,6 +27,8 @@ export type InventoryItem = {
   // Free-text storage location (e.g. "Warehouse A, Shelf 3"). Empty string
   // when unset. Capped at 100 chars by ItemSchema.
   location: string;
+  // Free-text manufacturer or brand name. Empty string when not set.
+  brand: string;
   photoUrl: string | null;
   notes: string;
   lifecycleState: ItemLifecycleState;

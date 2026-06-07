@@ -92,6 +92,7 @@ export function ItemForm(props: ItemFormProps) {
         totalQty: 0,
         unit: "pcs",
         location: "",
+        brand: "",
         photoUrl: "",
         notes: "",
         lowStockThreshold: 0,
@@ -117,6 +118,7 @@ export function ItemForm(props: ItemFormProps) {
           totalQty: values.totalQty,
           unit: values.unit ?? "pcs",
           location: values.location ?? "",
+          brand: values.brand ?? "",
           notes: values.notes ?? "",
           lowStockThreshold: values.lowStockThreshold ?? 0,
           photoUrl: photoUrl ?? null,
@@ -144,6 +146,7 @@ export function ItemForm(props: ItemFormProps) {
           category: values.category,
           unit: values.unit ?? "pcs",
           location: values.location ?? "",
+          brand: values.brand ?? "",
           notes: values.notes ?? "",
           lowStockThreshold: values.lowStockThreshold ?? 0,
           photoUrl: photoUrl ?? null,
@@ -306,6 +309,21 @@ export function ItemForm(props: ItemFormProps) {
               errors.location
                 ? [{ message: errors.location.message }]
                 : undefined
+            }
+          />
+        </Field>
+
+        <Field data-invalid={!!errors.brand}>
+          <FieldLabel htmlFor="item-brand">Brand</FieldLabel>
+          <Input
+            id="item-brand"
+            placeholder="e.g. Shure, Sennheiser"
+            aria-invalid={!!errors.brand}
+            {...register("brand")}
+          />
+          <FieldError
+            errors={
+              errors.brand ? [{ message: errors.brand.message }] : undefined
             }
           />
         </Field>
