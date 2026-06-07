@@ -103,6 +103,11 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
   if (!doc) notFound();
   const items = await fetchItemSummaries(doc.itemIds);
 
+  // Build qty lookup from stored itemLines (populated for checkout DOs).
+  const qtyByItemId = new Map<string, number>(
+    doc.itemLines.map((l) => [l.itemId, l.qty]),
+  );
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -194,26 +199,43 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
               No linked items available.
             </p>
           ) : (
-            <ul className="divide-y divide-border">
-              {items.map((item) => (
-                <li key={item.id} className="py-2 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <Link
-                      href={`/inventory/${item.id}`}
-                      className="text-sm font-medium hover:underline"
-                    >
-                      {item.name}
-                    </Link>
-                    <p className="text-xs text-muted-foreground font-mono">{item.sku}</p>
-                    {item.location ? (
-                      <p className="text-xs text-muted-foreground">
-                        {item.location}
-                      </p>
-                    ) : null}
-                  </div>
-                </li>
-              ))}
-            </ul>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="py-2 text-left font-medium text-muted-foreground">Item</th>
+                  <th className="py-2 text-left font-medium text-muted-foreground">SKU</th>
+                  {qtyByItemId.size > 0 && (
+                    <th className="py-2 text-right font-medium text-muted-foreground">Qty</th>
+                  )}
+                  <th className="py-2 text-left font-medium text-muted-foreground">Location</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr key={item.id} className="border-b last:border-0">
+                    <td className="py-2 pr-4">
+                      <Link
+                        href={`/inventory/${item.id}`}
+                        className="font-medium hover:underline"
+                      >
+                        {item.name}
+                      </Link>
+                    </td>
+                    <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">
+                      {item.sku}
+                    </td>
+                    {qtyByItemId.size > 0 && (
+                      <td className="py-2 pr-4 text-right tabular-nums">
+                        {qtyByItemId.get(item.id) ?? "—"}
+                      </td>
+                    )}
+                    <td className="py-2 text-xs text-muted-foreground">
+                      {item.location || "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </CardContent>
       </Card>
