@@ -3,11 +3,11 @@
 **Project:** cy-eventsystem
 **Owner:** kayinleong
 **Current milestone:** v1 — **COMPLETE 2026-05-27**
-**Last updated:** 2026-06-07 (Quick task quick-kayinleong-009 — Print checklist and Delivery Order dialogs: CheckoutChecklistDialog (#print-checklist, event name/date/cart table/total qty), CheckoutDOPrintDialog (#print-do-document, DoTypeBadge external-outbound, cart table, txIds reference), CheckoutGroupDialog step 2 Documents section (border-t, flex-wrap), checkout-client eventStartDate prop thread — 2 created, 2 modified, 2 commits on main; tsc PASS, lint PASS, build PASS.)
+**Last updated:** 2026-06-07 (Quick task quick-kayinleong-010 — Three bug fixes: (1) window.open() print in CheckoutChecklistDialog + CheckoutDOPrintDialog replacing @media print approach; (2) createCheckoutDeliveryOrderAction Server Action + nullable DO file fields + auto-create on checkout success; (3) item location in DO detail and EventAssignedItemsTab via Firestore in-query — 7 files modified, 3 commits on main; tsc PASS, lint PASS.)
 
 ---
 
-*Prior last-updated:* 2026-06-07 (Quick task quick-kayinleong-008 — Check-in group barcode guard: async addLine + mode-gated checkoutGroups getDoc probe + prescribed error toast — 4 files modified, 1 commit on main; tsc PASS, lint PASS.)
+*Prior last-updated:* 2026-06-07 (Quick task quick-kayinleong-009 — Print checklist and Delivery Order dialogs: CheckoutChecklistDialog (#print-checklist, event name/date/cart table/total qty), CheckoutDOPrintDialog (#print-do-document, DoTypeBadge external-outbound, cart table, txIds reference), CheckoutGroupDialog step 2 Documents section (border-t, flex-wrap), checkout-client eventStartDate prop thread — 2 created, 2 modified, 2 commits on main; tsc PASS, lint PASS, build PASS.)
 
 ---
 
@@ -41,6 +41,7 @@
 | quick-kayinleong-007 | Location scan tab: updateItemsLocationAction Server Action (3-step barcode resolution: SKU/doc-id, externalBarcode, checkoutGroups + adminDb.batch() writes + requireSession auth gate + Zod validation), LocationPanel component (idle/preview/submitting state machine, useInventoryLive snapshot item preview, free-text location input, success/error toasts), ScanMode widened to include "location", ScannerWidget patched with eventRequired + onScan override props, /scan page wired with third Location tab. 5 files (2 created, 3 modified), 0 errors, 0 warnings. | 2026-06-07 | e4b420c, 835c433 | [quick-kayinleong-007](./quick/quick-kayinleong-007/) |
 | quick-kayinleong-008 | Check-in group barcode guard: async addLine + mode-gated getDoc(checkoutGroups/{id}) probe, prescribed error toast, all three callers awaited. 4 files modified, 0 errors, 0 warnings. | 2026-06-07 | 4142f88 | [quick-kayinleong-008](./quick/quick-kayinleong-008/) |
 | quick-kayinleong-009 | Print checklist and Delivery Order dialogs in CheckoutGroupDialog step 2: CheckoutChecklistDialog (#print-checklist) + CheckoutDOPrintDialog (#print-do-document, DoTypeBadge external-outbound), Documents section with border-t divider, eventStartDate prop thread. 2 created, 2 modified, 0 errors, 0 warnings. | 2026-06-07 | dcc02c2, 8757e22 | [quick-kayinleong-009](./quick/quick-kayinleong-009/) |
+| quick-kayinleong-010 | Three bug fixes: window.open() print dialogs (no @media print/portal issue), auto-create DO on checkout (nullable file fields + createCheckoutDeliveryOrderAction + checkout-client toast), item location in DO detail and EventAssignedItemsTab. 7 modified, 0 errors, 0 warnings. | 2026-06-07 | 13c48b0, d5bd0ee, 8df1188 | [quick-kayinleong-010](./quick/quick-kayinleong-010/) |
 
 **v1 COMPLETE 2026-05-27 (verbatim from prior session).** Both phases of the locked 2-phase roadmap shipped. cy-eventsystem v1 is shippable pending PR review. Developer should review the closure commit (`docs(phase-kayinleong-02): Phase 2 COMPLETE — verification gate PASS, status done`) and push to remote, then open PR for human review per global CLAUDE.md "AI-authored code needs independent human review". PR description should include claim ID `phase-kayinleong-02`, regression report excerpt from CLAIM.md `## Verification` section, links to `audit-server-actions.md` + `rules-audit-final.md`, and the list of UI surface amendments (D-15 photo + D-17 cursor URLs). Tag v1.0.0 release when PR merges.
 
