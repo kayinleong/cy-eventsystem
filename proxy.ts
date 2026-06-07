@@ -20,7 +20,8 @@ import {
 const PUBLIC_PATHS = ["/login", "/forgot-password", "/set-password"];
 
 export async function proxy(request: NextRequest) {
-  return authMiddleware(request, {
+  try {
+  return await authMiddleware(request, {
     loginPath: "/api/auth/session",
     logoutPath: "/api/auth/logout",
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY!,
@@ -67,6 +68,25 @@ export async function proxy(request: NextRequest) {
       });
     },
   });
+  } catch (error) {
+    // Catches jose errors that escape the library's own error handling —
+    // e.g. a stale __session cookie with alg:RS256 (raw Firebase ID token)
+    // passed to jwtVerify with a Uint8Array HMAC key. The library only
+    // catches JWSSignatureVerificationFailed, not key-type mismatches.
+    // Clearing the cookie prevents a redirect loop on the next request.
+    console.error("[auth proxy error] Unhandled middleware error:", error);
+    const response = redirectToLogin(request, {
+      path: "/login",
+      publicPaths: PUBLIC_PATHS,
+    });
+    response.cookies.set("__session", "", {
+      path: "/",
+      maxAge: 0,
+      httpOnly: true,
+      sameSite: "lax",
+    });
+    return response;
+  }
 }
 
 export const config = {
