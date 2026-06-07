@@ -69,6 +69,7 @@ export async function createDeliveryOrder(
       tx.set(doRef, {
         id: data.doId,
         vendor: data.vendor,
+        doType: data.doType,
         fileUrl: data.fileUrl,
         filePath: data.filePath,
         originalFilename: data.originalFilename,

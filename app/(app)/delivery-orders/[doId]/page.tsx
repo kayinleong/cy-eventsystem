@@ -14,6 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { requireSession } from "@/lib/auth/dal";
 import { adminDb } from "@/lib/firebase/admin";
+import type { DeliveryOrderType } from "@/lib/types/delivery-order";
+import { DoTypeBadge } from "@/components/feature/delivery-orders/DoTypeBadge";
 
 type RouteProps = { params: Promise<{ doId: string }> };
 
@@ -23,6 +25,7 @@ type DoDetail = {
   fileUrl: string;
   originalFilename: string;
   contentType: string;
+  doType: DeliveryOrderType | null;
   itemIds: string[];
   notes: string;
   uploadedAt: string | null;
@@ -50,6 +53,7 @@ async function fetchDeliveryOrder(doId: string): Promise<DoDetail | null> {
     fileUrl: (data.fileUrl as string) ?? "",
     originalFilename: (data.originalFilename as string) ?? "",
     contentType: (data.contentType as string) ?? "",
+    doType: (data.doType as DeliveryOrderType) ?? null,
     itemIds: Array.isArray(data.itemIds) ? (data.itemIds as string[]) : [],
     notes: (data.notes as string) ?? "",
     uploadedAt: tsToIso(data.uploadedAt),
@@ -134,6 +138,19 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
             <p className="text-xs text-muted-foreground font-mono">
               by {doc.uploadedBy || "—"}
             </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Type</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {doc.doType ? (
+              <DoTypeBadge type={doc.doType} />
+            ) : (
+              <span className="text-sm text-muted-foreground">—</span>
+            )}
           </CardContent>
         </Card>
       </div>

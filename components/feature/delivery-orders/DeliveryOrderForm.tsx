@@ -15,6 +15,13 @@ import {
   DeliveryOrderFormSchema,
   type DeliveryOrderFormInput,
 } from "@/lib/schemas/delivery-order";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { InventoryItem } from "@/lib/types/item";
 import type { DoUploadResult } from "@/lib/storage/upload-delivery-order";
 import { createDeliveryOrder } from "@/app/(app)/delivery-orders/actions";
@@ -57,6 +64,7 @@ export function DeliveryOrderForm({ items }: { items: InventoryItem[] }) {
     mode: "onBlur",
     defaultValues: {
       vendor: "",
+      doType: "external-inbound" as const,
       itemIds: [],
       notes: "",
     },
@@ -73,6 +81,7 @@ export function DeliveryOrderForm({ items }: { items: InventoryItem[] }) {
       const result = await createDeliveryOrder({
         doId,
         vendor: values.vendor,
+        doType: values.doType,
         fileUrl: uploaded.url,
         filePath: uploaded.path,
         originalFilename: uploaded.originalFilename,
@@ -121,6 +130,35 @@ export function DeliveryOrderForm({ items }: { items: InventoryItem[] }) {
             errors={
               errors.vendor ? [{ message: errors.vendor.message }] : undefined
             }
+          />
+        </Field>
+
+        <Field>
+          <FieldLabel htmlFor="do-type">Type</FieldLabel>
+          <Controller
+            control={control}
+            name="doType"
+            render={({ field }) => (
+              <Select
+                value={field.value}
+                onValueChange={field.onChange}
+              >
+                <SelectTrigger id="do-type">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="external-inbound">
+                    External — Inbound (from vendor)
+                  </SelectItem>
+                  <SelectItem value="external-outbound">
+                    External — Outbound (to vendor / return)
+                  </SelectItem>
+                  <SelectItem value="internal">
+                    Internal (staff allocation)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           />
         </Field>
 

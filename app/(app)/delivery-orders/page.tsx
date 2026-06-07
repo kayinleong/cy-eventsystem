@@ -18,12 +18,15 @@ import {
 } from "@/components/ui/table";
 import { requireAdmin } from "@/lib/auth/dal";
 import { adminDb } from "@/lib/firebase/admin";
+import type { DeliveryOrderType } from "@/lib/types/delivery-order";
+import { DoTypeBadge } from "@/components/feature/delivery-orders/DoTypeBadge";
 
 export const metadata: Metadata = { title: "Delivery Orders" };
 
 type DoRow = {
   id: string;
   vendor: string;
+  doType: DeliveryOrderType | null;
   itemCount: number;
   originalFilename: string;
   fileUrl: string;
@@ -50,6 +53,7 @@ async function fetchRecentDeliveryOrders(): Promise<DoRow[]> {
     return {
       id: d.id,
       vendor: (data.vendor as string) ?? "",
+      doType: (data.doType as DeliveryOrderType) ?? null,
       itemCount: Array.isArray(data.itemIds) ? data.itemIds.length : 0,
       originalFilename: (data.originalFilename as string) ?? "",
       fileUrl: (data.fileUrl as string) ?? "",
@@ -94,6 +98,7 @@ export default async function DeliveryOrdersListPage() {
             <TableRow>
               <TableHead>Vendor</TableHead>
               <TableHead>File</TableHead>
+              <TableHead>Type</TableHead>
               <TableHead className="text-right">Items</TableHead>
               <TableHead>Uploaded</TableHead>
               <TableHead className="text-right">Action</TableHead>
@@ -115,6 +120,13 @@ export default async function DeliveryOrdersListPage() {
                       {r.originalFilename || "document"}
                     </span>
                   </a>
+                </TableCell>
+                <TableCell>
+                  {r.doType ? (
+                    <DoTypeBadge type={r.doType} />
+                  ) : (
+                    <span className="text-muted-foreground text-xs">—</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {r.itemCount}
