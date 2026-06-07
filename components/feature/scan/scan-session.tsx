@@ -294,7 +294,8 @@ export function ScanSessionProvider({
       const lower = trimmed.toLowerCase();
       const item =
         items.find((i) => i.sku.toLowerCase() === lower) ??
-        items.find((i) => i.id === trimmed);
+        items.find((i) => i.id === trimmed) ??
+        items.find((i) => i.externalBarcode !== "" && i.externalBarcode === trimmed);
 
       if (!item) {
         // UI-SPEC "No scan match" copy verbatim.

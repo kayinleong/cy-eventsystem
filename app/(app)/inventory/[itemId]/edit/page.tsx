@@ -40,6 +40,7 @@ export default async function EditItemPage({ params }: RouteProps) {
           unit: item.unit,
           location: item.location,
           brand: item.brand,
+          externalBarcode: item.externalBarcode,
           photoUrl: item.photoUrl ?? "",
           notes: item.notes,
           lowStockThreshold: item.lowStockThreshold,

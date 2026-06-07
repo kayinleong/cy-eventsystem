@@ -58,6 +58,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { ItemPhotoField } from "./ItemPhotoField";
+import { BarcodeFieldInput } from "./BarcodeFieldInput";
 
 export type ItemFormProps =
   | { mode: "create"; initial?: ItemFormInput; itemId?: undefined }
@@ -80,6 +81,7 @@ export function ItemForm(props: ItemFormProps) {
     setError,
     control,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<ItemFormInput>({
     resolver: zodResolver(ItemFormSchema),
@@ -93,6 +95,7 @@ export function ItemForm(props: ItemFormProps) {
         unit: "pcs",
         location: "",
         brand: "",
+        externalBarcode: "",
         photoUrl: "",
         notes: "",
         lowStockThreshold: 0,
@@ -119,6 +122,7 @@ export function ItemForm(props: ItemFormProps) {
           unit: values.unit ?? "pcs",
           location: values.location ?? "",
           brand: values.brand ?? "",
+          externalBarcode: values.externalBarcode ?? "",
           notes: values.notes ?? "",
           lowStockThreshold: values.lowStockThreshold ?? 0,
           photoUrl: photoUrl ?? null,
@@ -147,6 +151,7 @@ export function ItemForm(props: ItemFormProps) {
           unit: values.unit ?? "pcs",
           location: values.location ?? "",
           brand: values.brand ?? "",
+          externalBarcode: values.externalBarcode ?? "",
           notes: values.notes ?? "",
           lowStockThreshold: values.lowStockThreshold ?? 0,
           photoUrl: photoUrl ?? null,
@@ -324,6 +329,26 @@ export function ItemForm(props: ItemFormProps) {
           <FieldError
             errors={
               errors.brand ? [{ message: errors.brand.message }] : undefined
+            }
+          />
+        </Field>
+
+        <Field data-invalid={!!errors.externalBarcode}>
+          <FieldLabel htmlFor="item-externalBarcode">
+            External barcode (optional)
+          </FieldLabel>
+          <BarcodeFieldInput
+            value={watch("externalBarcode") ?? ""}
+            onChange={(v) =>
+              setValue("externalBarcode", v, { shouldValidate: true })
+            }
+            disabled={submitting}
+          />
+          <FieldError
+            errors={
+              errors.externalBarcode
+                ? [{ message: errors.externalBarcode.message }]
+                : undefined
             }
           />
         </Field>

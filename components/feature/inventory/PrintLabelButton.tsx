@@ -34,13 +34,16 @@ import { LabelPreview } from "./LabelPreview";
 export function PrintLabelButton({
   sku,
   name,
+  externalBarcode,
 }: {
   sku: string;
   name: string;
+  externalBarcode?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [format, setFormat] = useState<BarcodeFormat>("qrcode");
-  const check = canEncode(sku, format);
+  const barcodePayload = externalBarcode?.trim() || sku;
+  const check = canEncode(barcodePayload, format);
 
   function doPrint() {
     if (typeof window === "undefined") return;
@@ -102,8 +105,8 @@ export function PrintLabelButton({
               id="print-label"
               className="flex flex-col items-center gap-2 py-4"
             >
-              <LabelPreview value={sku} format={format} />
-              <p className="font-mono text-sm">{sku}</p>
+              <LabelPreview value={barcodePayload} format={format} />
+              <p className="font-mono text-sm">{barcodePayload}</p>
               <p className="text-sm text-muted-foreground">{name}</p>
             </div>
           ) : (

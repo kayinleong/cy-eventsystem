@@ -83,7 +83,7 @@ export function ItemDetail({
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <PrintLabelButton sku={item.sku} name={item.name} />
+          <PrintLabelButton sku={item.sku} name={item.name} externalBarcode={item.externalBarcode} />
           {isAdmin ? (
             <Button asChild variant="outline">
               <Link href={`/inventory/${item.id}/edit`}>
