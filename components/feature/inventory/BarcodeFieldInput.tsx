@@ -13,17 +13,17 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ScanLine, X } from "lucide-react";
+import { ScanLine } from "lucide-react";
 import { Scanner } from "@yudiel/react-qr-scanner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export type BarcodeFieldInputProps = {
   value: string;
@@ -59,23 +59,15 @@ export function BarcodeFieldInput({
         <ScanLine className="size-4" />
       </Button>
 
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="bottom" className="h-[80dvh] flex flex-col">
-          <SheetHeader className="flex-row items-center justify-between shrink-0">
-            <SheetTitle>Scan barcode</SheetTitle>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => setOpen(false)}
-              aria-label="Close scanner"
-            >
-              <X className="size-5" />
-            </Button>
-          </SheetHeader>
-          {/* Fixed-height container prevents the Scanner video from overflowing
-              the sheet and covering the close button. */}
-          <div className="flex-1 min-h-0 mt-4 overflow-hidden rounded-md">
+      {/* Dialog keeps the scanner inside a centered fixed-size modal.
+          Sheet + video tends to escape overflow-hidden on various browsers. */}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-sm p-0 overflow-hidden">
+          <DialogHeader className="px-4 pt-4 pb-2">
+            <DialogTitle>Scan barcode</DialogTitle>
+          </DialogHeader>
+          {/* Explicit pixel height so the video has a resolved parent size. */}
+          <div style={{ height: 320 }}>
             <Scanner
               formats={[
                 "qr_code",
@@ -85,7 +77,7 @@ export function BarcodeFieldInput({
                 "data_matrix",
               ]}
               paused={!open}
-              styles={{ container: { height: "100%" } }}
+              styles={{ container: { height: "100%", width: "100%" } }}
               onScan={(detections) => {
                 if (!detections.length) return;
                 const now = Date.now();
@@ -100,8 +92,8 @@ export function BarcodeFieldInput({
               }}
             />
           </div>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
