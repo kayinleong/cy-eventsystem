@@ -3,7 +3,7 @@
 **Project:** cy-eventsystem
 **Owner:** kayinleong
 **Current milestone:** v1 — **COMPLETE 2026-05-27**
-**Last updated:** 2026-06-07 (Quick task quick-kayinleong-003 — brand field on inventory items: type, schemas, mappers, Server Actions, form, detail, table column + q search — 9 files, 2 commits on main; automated gates PASS.)
+**Last updated:** 2026-06-07 (Quick task quick-kayinleong-004 — doType enum (internal | external-outbound | external-inbound) on Delivery Orders: DeliveryOrderType union, DoTypeEnum Zod schema, DoTypeBadge component, form Select, action write, list Type column, detail Type card — 7 files, 2 commits on main; automated gates PASS; human-verify auto-approved.)
 
 ---
 
@@ -16,7 +16,7 @@
 
 ## Current focus
 
-**v1 COMPLETE 2026-05-27** — both phases shipped. **Quick task quick-kayinleong-003 (2026-06-07)** added a free-text `brand` field to inventory items: type, 4 Zod schemas, 2 Firestore mappers, createItem + updateItem Server Actions, ItemForm, edit page, ItemDetail row, InventoryTable column + q= search. 9 files, 2 commits on main; tsc PASS, lint PASS, build PASS (32 routes). Pending quick tasks from user feedback: custom barcode (feature 1), group barcode + location tracking (features 2–4), DO type labels (feature 6), print checklist + DO at checkout (feature 7).
+**v1 COMPLETE 2026-05-27** — both phases shipped. **Quick task quick-kayinleong-004 (2026-06-07)** added `doType` enum (internal | external-outbound | external-inbound) to the Delivery Order module: DeliveryOrderType union, DoTypeEnum Zod schema (with `.default("external-inbound")` for legacy doc safety), DoTypeBadge component (plain function, Server+Client importable), Controller-bridged Select on the upload form defaulting to "external-inbound", doType write in createDeliveryOrder action, Type column in the list table, and Type card in the detail page. 7 files (1 created, 6 modified), 2 commits on main; tsc PASS, lint PASS, build PASS (32 routes). Pending quick tasks from user feedback: custom barcode (feature 1), group barcode + location tracking (features 2–4), print checklist + DO at checkout (feature 7).
 
 ### Quick Tasks Completed
 
@@ -25,6 +25,7 @@
 | quick-kayinleong-001 | Barcode format picker + item location + DO upload (minimal slice). Photo skipped — already shipped. | 2026-05-29 | c5082df, ee76b65, 31a4d70, a20188a | [quick-kayinleong-001](./quick/quick-kayinleong-001/) |
 | quick-kayinleong-002 | Fix DO Storage rule path-glob — `document.{ext}` is not valid Firebase path syntax; rewrite as `{fileName}` + `.matches()`. **Requires `firebase deploy --only storage` to take effect.** | 2026-05-29 | (pending commit) | [quick-kayinleong-002](./quick/quick-kayinleong-002/) |
 | quick-kayinleong-003 | Brand field on inventory items — full vertical slice: type, 4 Zod schemas, 2 Firestore mappers, createItem + updateItem Server Actions, ItemForm (field + defaultValues + onSubmit), edit page initial, ItemDetail row, InventoryTable column + q= search. 9 files, 0 errors, 0 warnings. | 2026-06-07 | 96c72cc, c69d1ff | [quick-kayinleong-003](./quick/quick-kayinleong-003/) |
+| quick-kayinleong-004 | doType enum (internal | external-outbound | external-inbound) on Delivery Orders — DeliveryOrderType union, DoTypeEnum Zod schemas (read default + create/form required), DoTypeBadge component, Controller-bridged Select on form, doType write in action, Type column in list, Type card in detail. 7 files (1 created, 6 modified), 0 errors, 0 warnings. | 2026-06-07 | 9864972, 7cf7022 | [quick-kayinleong-004](./quick/quick-kayinleong-004/) |
 
 **v1 COMPLETE 2026-05-27 (verbatim from prior session).** Both phases of the locked 2-phase roadmap shipped. cy-eventsystem v1 is shippable pending PR review. Developer should review the closure commit (`docs(phase-kayinleong-02): Phase 2 COMPLETE — verification gate PASS, status done`) and push to remote, then open PR for human review per global CLAUDE.md "AI-authored code needs independent human review". PR description should include claim ID `phase-kayinleong-02`, regression report excerpt from CLAIM.md `## Verification` section, links to `audit-server-actions.md` + `rules-audit-final.md`, and the list of UI surface amendments (D-15 photo + D-17 cursor URLs). Tag v1.0.0 release when PR merges.
 
