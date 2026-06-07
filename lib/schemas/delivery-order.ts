@@ -31,6 +31,16 @@ export const DeliveryOrderSchema = z.object({
   sourceType: z.enum(["manual", "checkout"]).default("manual"),
   eventId: z.string().nullable().default(null),
   itemIds: z.array(z.string().min(1)).min(1),
+  itemLines: z
+    .array(
+      z.object({
+        itemId: z.string().min(1),
+        itemName: z.string(),
+        itemSku: z.string(),
+        qty: z.number().int().nonnegative(),
+      }),
+    )
+    .default([]),
   checkoutGroupIds: z.array(z.string()).default([]),
   notes: z.string().max(2000).default(""),
   uploadedAt: z.string(),

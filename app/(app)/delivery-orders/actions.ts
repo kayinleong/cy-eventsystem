@@ -133,6 +133,7 @@ export async function createCheckoutDeliveryOrderAction(input: {
   eventName: string;
   itemIds: string[];
   txIds: string[];
+  lines?: { itemId: string; itemName: string; itemSku: string; qty: number }[];
   notes?: string;
 }): Promise<{ ok: true; doId: string } | { ok: false; error: string }> {
   const session = await requireSession();
@@ -156,6 +157,8 @@ export async function createCheckoutDeliveryOrderAction(input: {
       sourceType: "checkout",
       eventId: input.eventId,
       itemIds: uniqueItemIds,
+      itemLines: input.lines ?? [],
+      checkoutGroupIds: [],
       notes: input.notes ?? "",
       uploadedAt: FieldValue.serverTimestamp(),
       uploadedBy: session.uid,

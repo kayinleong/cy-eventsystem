@@ -15,6 +15,7 @@ import { requireSession } from "@/lib/auth/dal";
 import { adminDb } from "@/lib/firebase/admin";
 import type { DeliveryOrderType } from "@/lib/types/delivery-order";
 import { DoTypeBadge } from "@/components/feature/delivery-orders/DoTypeBadge";
+import { DODetailActions } from "@/components/feature/delivery-orders/DODetailActions";
 
 type RouteProps = { params: Promise<{ doId: string }> };
 
@@ -28,6 +29,7 @@ type DoDetail = {
   sourceType: "manual" | "checkout";
   eventId: string | null;
   itemIds: string[];
+  itemLines: { itemId: string; itemName: string; itemSku: string; qty: number }[];
   checkoutGroupIds: string[];
   notes: string;
   uploadedAt: string | null;
@@ -59,6 +61,9 @@ async function fetchDeliveryOrder(doId: string): Promise<DoDetail | null> {
     sourceType: (data.sourceType as "manual" | "checkout") ?? "manual",
     eventId: (data.eventId as string | null) ?? null,
     itemIds: Array.isArray(data.itemIds) ? (data.itemIds as string[]) : [],
+    itemLines: Array.isArray(data.itemLines)
+      ? (data.itemLines as { itemId: string; itemName: string; itemSku: string; qty: number }[])
+      : [],
     checkoutGroupIds: Array.isArray(data.checkoutGroupIds) ? (data.checkoutGroupIds as string[]) : [],
     notes: (data.notes as string) ?? "",
     uploadedAt: tsToIso(data.uploadedAt),
@@ -213,21 +218,18 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
         </CardContent>
       </Card>
 
-      {doc.checkoutGroupIds.length > 0 && (
+      {(doc.itemLines.length > 0 || doc.checkoutGroupIds.length > 0) && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">
-              Group Barcodes ({doc.checkoutGroupIds.length})
-            </CardTitle>
+            <CardTitle className="text-sm">Actions</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="divide-y divide-border">
-              {doc.checkoutGroupIds.map((gid) => (
-                <li key={gid} className="py-1.5 font-mono text-xs text-muted-foreground break-all">
-                  {gid}
-                </li>
-              ))}
-            </ul>
+            <DODetailActions
+              vendor={doc.vendor}
+              uploadedAt={doc.uploadedAt}
+              itemLines={doc.itemLines}
+              checkoutGroupIds={doc.checkoutGroupIds}
+            />
           </CardContent>
         </Card>
       )}

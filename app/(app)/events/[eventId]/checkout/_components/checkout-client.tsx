@@ -90,6 +90,12 @@ export function CheckoutClient({ event }: { event: EventDoc }) {
             eventName: event.name,
             itemIds: payload.cart.map((l) => l.itemId),
             txIds: payload.txIds,
+            lines: payload.cart.map((l) => ({
+              itemId: l.itemId,
+              itemName: l.itemName,
+              itemSku: l.itemSku,
+              qty: l.qty,
+            })),
           }).then((result) => {
             if (result.ok) {
               doIdRef.current = result.doId;
