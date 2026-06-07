@@ -71,6 +71,30 @@ async function fetchDeliveryOrder(doId: string): Promise<DoDetail | null> {
   };
 }
 
+type GroupItemLine = { itemId: string; itemName: string; itemSku: string; qty: number };
+
+// Reads all linked checkoutGroups and aggregates qty per itemId across groups.
+// Used as fallback when the DO's own itemLines field is empty (older DOs).
+async function fetchQtyFromGroups(groupIds: string[]): Promise<GroupItemLine[]> {
+  if (groupIds.length === 0) return [];
+  const refs = groupIds.map((id) => adminDb.collection("checkoutGroups").doc(id));
+  const snaps = await adminDb.getAll(...refs);
+  const qtyMap = new Map<string, GroupItemLine>();
+  for (const snap of snaps) {
+    if (!snap.exists) continue;
+    const lines = (snap.data()!.itemLines as GroupItemLine[] | undefined) ?? [];
+    for (const line of lines) {
+      const existing = qtyMap.get(line.itemId);
+      if (existing) {
+        existing.qty += line.qty;
+      } else {
+        qtyMap.set(line.itemId, { ...line });
+      }
+    }
+  }
+  return Array.from(qtyMap.values());
+}
+
 async function fetchItemSummaries(itemIds: string[]): Promise<ItemSummary[]> {
   if (itemIds.length === 0) return [];
   const refs = itemIds.map((id) => adminDb.collection("inventory").doc(id));
@@ -103,9 +127,16 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
   if (!doc) notFound();
   const items = await fetchItemSummaries(doc.itemIds);
 
-  // Build qty lookup from stored itemLines (populated for checkout DOs).
+  // Resolve effective item lines with qty:
+  //   1. doc.itemLines — present on DOs created after the itemLines field was added.
+  //   2. Aggregate from checkoutGroups — fallback for older DOs where itemLines is empty.
+  const effectiveItemLines =
+    doc.itemLines.length > 0
+      ? doc.itemLines
+      : await fetchQtyFromGroups(doc.checkoutGroupIds);
+
   const qtyByItemId = new Map<string, number>(
-    doc.itemLines.map((l) => [l.itemId, l.qty]),
+    effectiveItemLines.map((l) => [l.itemId, l.qty]),
   );
 
   return (
@@ -249,7 +280,7 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
             <DODetailActions
               vendor={doc.vendor}
               uploadedAt={doc.uploadedAt}
-              itemLines={doc.itemLines}
+              itemLines={effectiveItemLines}
               fallbackItems={items}
               checkoutGroupIds={doc.checkoutGroupIds}
             />
