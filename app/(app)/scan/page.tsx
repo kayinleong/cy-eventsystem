@@ -39,6 +39,7 @@ import { ScanCartPanel } from "@/components/feature/scan/ScanCartPanel";
 import { ScanHeader } from "@/components/feature/scan/ScanHeader";
 import { EventPickerDialog } from "@/components/feature/scan/EventPickerDialog";
 import { ManualEntryInput } from "@/components/feature/scan/ManualEntryInput";
+import { LocationPanel } from "@/components/feature/scan/LocationPanel";
 
 function ScanInner() {
   const { mode, setMode, selectedEvent, selectEvent, addLine } =
@@ -52,43 +53,52 @@ function ScanInner() {
         description={
           mode === "checkout"
             ? "Scan items to check them out."
-            : "Scan items being returned."
+            : mode === "checkin"
+              ? "Scan items being returned."
+              : "Scan to update item locations."
         }
       />
       <Tabs value={mode} onValueChange={(v) => setMode(v as ScanMode)}>
         <TabsList>
           <TabsTrigger value="checkout">Check out</TabsTrigger>
           <TabsTrigger value="checkin">Check in</TabsTrigger>
+          <TabsTrigger value="location">Location</TabsTrigger>
         </TabsList>
       </Tabs>
 
-      <ScanHeader />
+      {mode === "location" ? (
+        <LocationPanel />
+      ) : (
+        <>
+          <ScanHeader />
 
-      {!selectedEvent ? (
-        <div className="rounded-lg border border-dashed p-6 text-center space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Pick an event to begin scanning.
-          </p>
-          <Button onClick={() => setPickerOpen(true)}>Pick event</Button>
-        </div>
-      ) : null}
+          {!selectedEvent ? (
+            <div className="rounded-lg border border-dashed p-6 text-center space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Pick an event to begin scanning.
+              </p>
+              <Button onClick={() => setPickerOpen(true)}>Pick event</Button>
+            </div>
+          ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="space-y-3">
-          <ScannerWidget />
-          <ManualEntryInput
-            onSubmit={(sku) => addLine(sku)}
-            disabled={!selectedEvent}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="space-y-3">
+              <ScannerWidget />
+              <ManualEntryInput
+                onSubmit={(sku) => addLine(sku)}
+                disabled={!selectedEvent}
+              />
+            </div>
+            <ScanCartPanel />
+          </div>
+
+          <EventPickerDialog
+            open={pickerOpen}
+            onOpenChange={setPickerOpen}
+            onSelect={(e) => selectEvent(e)}
           />
-        </div>
-        <ScanCartPanel />
-      </div>
-
-      <EventPickerDialog
-        open={pickerOpen}
-        onOpenChange={setPickerOpen}
-        onSelect={(e) => selectEvent(e)}
-      />
+        </>
+      )}
     </div>
   );
 }
