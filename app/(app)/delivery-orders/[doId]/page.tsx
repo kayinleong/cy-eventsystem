@@ -95,6 +95,14 @@ async function fetchQtyFromGroups(groupIds: string[]): Promise<GroupItemLine[]> 
   return Array.from(qtyMap.values());
 }
 
+async function fetchUploaderName(uid: string): Promise<string> {
+  if (!uid) return "—";
+  const snap = await adminDb.collection("users").doc(uid).get();
+  if (!snap.exists) return uid;
+  const d = snap.data()!;
+  return (d.displayName as string) || (d.email as string) || uid;
+}
+
 async function fetchItemSummaries(itemIds: string[]): Promise<ItemSummary[]> {
   if (itemIds.length === 0) return [];
   const refs = itemIds.map((id) => adminDb.collection("inventory").doc(id));
@@ -125,7 +133,10 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
   const { doId } = await params;
   const doc = await fetchDeliveryOrder(doId);
   if (!doc) notFound();
-  const items = await fetchItemSummaries(doc.itemIds);
+  const [items, uploaderName] = await Promise.all([
+    fetchItemSummaries(doc.itemIds),
+    fetchUploaderName(doc.uploadedBy),
+  ]);
 
   // Resolve effective item lines with qty:
   //   1. doc.itemLines — present on DOs created after the itemLines field was added.
@@ -194,8 +205,8 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
                 ? new Date(doc.uploadedAt).toLocaleString()
                 : "—"}
             </p>
-            <p className="text-xs text-muted-foreground font-mono">
-              by {doc.uploadedBy || "—"}
+            <p className="text-xs text-muted-foreground">
+              by {uploaderName}
             </p>
           </CardContent>
         </Card>
@@ -236,7 +247,7 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
                   <th className="py-2 text-left font-medium text-muted-foreground">Item</th>
                   <th className="py-2 text-left font-medium text-muted-foreground">SKU</th>
                   {qtyByItemId.size > 0 && (
-                    <th className="py-2 text-right font-medium text-muted-foreground">Qty</th>
+                    <th className="py-2 pr-6 text-right font-medium text-muted-foreground">Qty</th>
                   )}
                   <th className="py-2 text-left font-medium text-muted-foreground">Location</th>
                 </tr>
@@ -256,7 +267,7 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
                       {item.sku}
                     </td>
                     {qtyByItemId.size > 0 && (
-                      <td className="py-2 pr-4 text-right tabular-nums">
+                      <td className="py-2 pr-6 text-right tabular-nums">
                         {qtyByItemId.get(item.id) ?? "—"}
                       </td>
                     )}
