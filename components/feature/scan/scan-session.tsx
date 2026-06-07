@@ -75,7 +75,7 @@ import {
 import { useInventoryLive } from "@/lib/hooks/use-inventory-live";
 import type { EventDoc } from "@/lib/types/event";
 
-export type ScanMode = "checkout" | "checkin";
+export type ScanMode = "checkout" | "checkin" | "location";
 
 export type ScanCartLine = {
   itemId: string;
@@ -121,7 +121,12 @@ function loadPersisted(): PersistedScanSession | null {
     if (!parsed || typeof parsed !== "object") return null;
     if (typeof parsed.timestamp !== "number") return null;
     if (Date.now() - parsed.timestamp > STALE_MS) return null;
-    if (parsed.mode !== "checkout" && parsed.mode !== "checkin") return null;
+    if (
+      parsed.mode !== "checkout" &&
+      parsed.mode !== "checkin" &&
+      parsed.mode !== "location"
+    )
+      return null;
     if (!Array.isArray(parsed.cart)) return null;
     // selectedEvent is allowed to be null (user picked mode but not an event
     // yet, then refreshed). Guard against malformed object shapes only.
@@ -265,7 +270,11 @@ export function ScanSessionProvider({
       }
       try {
         const parsed = JSON.parse(e.newValue) as PersistedScanSession;
-        if (parsed.mode !== "checkout" && parsed.mode !== "checkin") {
+        if (
+          parsed.mode !== "checkout" &&
+          parsed.mode !== "checkin" &&
+          parsed.mode !== "location"
+        ) {
           return;
         }
         setCart(Array.isArray(parsed.cart) ? parsed.cart : []);

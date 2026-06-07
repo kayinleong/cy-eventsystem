@@ -44,7 +44,19 @@ import { Button } from "@/components/ui/button";
 
 import { useScanSession } from "./scan-session";
 
-export function ScannerWidget({ paused = false }: { paused?: boolean }) {
+export function ScannerWidget({
+  paused = false,
+  eventRequired = true,
+  onScan,
+}: {
+  paused?: boolean;
+  // When false, the camera activates without a selected event (location mode).
+  // Defaults to true so existing checkout/checkin call sites are unchanged.
+  eventRequired?: boolean;
+  // When provided, called instead of addLine on each successful scan.
+  // Allows the LocationPanel to intercept scans without routing to the cart.
+  onScan?: (value: string) => void;
+}) {
   const { addLine, selectedEvent } = useScanSession();
   const lastValue = useRef<{ value: string; at: number } | null>(null);
   const [permissionError, setPermissionError] = useState<string | null>(null);
@@ -95,7 +107,11 @@ export function ScannerWidget({ paused = false }: { paused?: boolean }) {
     );
   }
 
-  const isPaused = paused || !active || !selectedEvent || !!permissionError;
+  const isPaused =
+    paused ||
+    !active ||
+    (eventRequired ? !selectedEvent : false) ||
+    !!permissionError;
 
   function handleScan(results: IDetectedBarcode[]) {
     const value = results[0]?.rawValue;
@@ -114,7 +130,11 @@ export function ScannerWidget({ paused = false }: { paused?: boolean }) {
     if (typeof navigator !== "undefined" && "vibrate" in navigator) {
       navigator.vibrate(50);
     }
-    addLine(value);
+    if (onScan) {
+      onScan(value);
+    } else {
+      addLine(value);
+    }
   }
 
   function handleError(err: IScannerError | unknown) {
@@ -181,7 +201,7 @@ export function ScannerWidget({ paused = false }: { paused?: boolean }) {
               battery on phones left on the page. */}
           <Camera className="size-8 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
-            {selectedEvent
+            {!eventRequired || selectedEvent
               ? "Tap to start the camera."
               : "Pick an event below before scanning."}
           </p>
@@ -191,7 +211,7 @@ export function ScannerWidget({ paused = false }: { paused?: boolean }) {
               setPermissionError(null);
               setActive(true);
             }}
-            disabled={!selectedEvent}
+            disabled={eventRequired && !selectedEvent}
             className="h-11"
           >
             <Camera className="mr-2 size-4" /> Start camera
