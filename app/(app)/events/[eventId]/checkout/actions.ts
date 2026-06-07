@@ -45,6 +45,10 @@ import { revalidatePath } from "next/cache";
 import { CheckoutCartSchema } from "@/lib/schemas/transaction";
 import { computeIsLowStock } from "@/lib/schemas/item";
 import type { ItemLifecycleState } from "@/lib/types/item";
+import {
+  CreateCheckoutGroupInputSchema,
+  type CreateCheckoutGroupInput,
+} from "@/lib/schemas/checkout-group";
 
 export type CheckoutResult =
   | { ok: true; txIds: string[] }
@@ -232,4 +236,56 @@ export async function commitCheckoutCartAction(input: {
   revalidatePath("/reports/out");
   revalidatePath("/reports/history");
   return { ok: true, txIds };
+}
+
+// ---- createCheckoutGroupAction (quick-kayinleong-006) ----
+// Creates a checkoutGroups document representing a physical group of items
+// checked out together. The doc ID is the barcode payload used at check-in.
+//
+// Security:
+//   T-006-01 — requireSession() at entry; uid from server-side session cookie.
+//   T-006-02 — EVT-08 gate: admin OR uid ∈ event.allowedStaff; Firestore rules
+//              enforce isMember() as defense-in-depth.
+//   T-006-03 — document is immutable (Firestore rule: update/delete → false).
+
+export type CreateCheckoutGroupResult =
+  | { ok: true; groupId: string }
+  | { ok: false; error: string };
+
+export async function createCheckoutGroupAction(
+  input: CreateCheckoutGroupInput,
+): Promise<CreateCheckoutGroupResult> {
+  const session = await requireSession();
+
+  // EVT-08 gate — admin OR uid ∈ allowedStaff
+  const eventSnap = await adminDb.collection("events").doc(input.eventId).get();
+  if (!eventSnap.exists) return { ok: false, error: "Event not found" };
+  const eventData = eventSnap.data() as {
+    allowedStaff?: string[];
+    role?: string;
+  };
+  const isAdminUser = session.role === "admin";
+  const isMemberUser =
+    Array.isArray(eventData.allowedStaff) &&
+    eventData.allowedStaff.includes(session.uid);
+  if (!isAdminUser && !isMemberUser)
+    return { ok: false, error: "Access denied" };
+
+  // Validate input
+  const parsed = CreateCheckoutGroupInputSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.message };
+
+  // Write document — doc ID is the barcode payload
+  const groupRef = adminDb.collection("checkoutGroups").doc();
+  await groupRef.set({
+    id: groupRef.id,
+    eventId: parsed.data.eventId,
+    txIds: parsed.data.txIds,
+    itemLines: parsed.data.itemLines,
+    label: parsed.data.label,
+    createdAt: FieldValue.serverTimestamp(),
+    createdBy: session.uid,
+  });
+
+  return { ok: true, groupId: groupRef.id };
 }

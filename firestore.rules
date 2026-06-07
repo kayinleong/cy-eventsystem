@@ -89,6 +89,16 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // -------- checkoutGroups (quick-kayinleong-006) --------
+    // Admin or event member can create; immutable after creation.
+    // Any signed-in user can read (scanners resolve group IDs at check-in, quick-008).
+    match /checkoutGroups/{groupId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn()
+        && isMember(get(/databases/$(database)/documents/events/$(request.resource.data.eventId)));
+      allow update, delete: if false;
+    }
+
     // -------- catch-all deny-by-default (D-06 mitigation a) --------
     // Anything not explicitly allowed above is denied.
     match /{document=**} {
