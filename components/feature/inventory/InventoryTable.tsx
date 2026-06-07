@@ -117,7 +117,8 @@ export function InventoryTable({
         const q = url.q.toLowerCase();
         if (
           !i.name.toLowerCase().includes(q) &&
-          !i.sku.toLowerCase().includes(q)
+          !i.sku.toLowerCase().includes(q) &&
+          !i.brand.toLowerCase().includes(q)
         ) {
           return false;
         }
@@ -167,6 +168,15 @@ export function InventoryTable({
         accessorKey: "category",
         // D-11: category is NOT sortable.
         header: "Category",
+      },
+      {
+        accessorKey: "brand",
+        // D-11: brand is NOT sortable.
+        header: "Brand",
+        cell: ({ row }) =>
+          row.original.brand || (
+            <span className="text-muted-foreground text-xs">—</span>
+          ),
       },
       {
         accessorKey: "availableQty",

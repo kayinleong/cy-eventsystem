@@ -137,6 +137,14 @@ export function ItemDetail({
               </dd>
             </div>
             <div>
+              <dt className="text-muted-foreground">Brand</dt>
+              <dd>
+                {item.brand || (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </dd>
+            </div>
+            <div>
               <dt className="text-muted-foreground">Unit</dt>
               <dd>{item.unit}</dd>
             </div>
