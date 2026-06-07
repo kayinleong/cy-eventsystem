@@ -39,15 +39,6 @@ import { CheckoutDOPrintDialog } from "./CheckoutDOPrintDialog";
 
 // ---- pure helper functions ----
 
-function splitLines(
-  lines: ScanCartLine[],
-  n: number,
-): ScanCartLine[][] {
-  const groups: ScanCartLine[][] = Array.from({ length: n }, () => []);
-  lines.forEach((line, i) => groups[i % n].push(line));
-  return groups;
-}
-
 function buildGroupLabel(
   groupIndex: number,
   totalGroups: number,
@@ -55,6 +46,24 @@ function buildGroupLabel(
 ): string {
   if (totalGroups === 1) return eventName;
   return `Group ${groupIndex + 1} of ${totalGroups} — ${eventName}`;
+}
+
+// allocation[itemIdx][groupIdx] = qty assigned to that group.
+// Initial distribution: whole item line → one group via modulo.
+function initAllocation(cart: ScanCartLine[], n: number): number[][] {
+  return cart.map((line, i) =>
+    Array.from({ length: n }, (_, g) => (g === i % n ? line.qty : 0)),
+  );
+}
+
+function buildGroupLines(
+  cart: ScanCartLine[],
+  allocation: number[][],
+  groupIdx: number,
+): ScanCartLine[] {
+  return cart
+    .map((line, i) => ({ ...line, qty: allocation[i][groupIdx] }))
+    .filter((l) => l.qty > 0);
 }
 
 // ---- types ----
@@ -82,20 +91,40 @@ export function CheckoutGroupDialog({
 }: CheckoutGroupDialogProps) {
   const [step, setStep] = useState<1 | 2>(1);
   const [splitCount, setSplitCount] = useState(1);
+  const [allocation, setAllocation] = useState<number[][]>(() =>
+    initAllocation(payload.cart, 1),
+  );
   const [isCreating, setIsCreating] = useState(false);
   const [groups, setGroups] = useState<GeneratedGroup[]>([]);
 
-  // Preview: how many items in each group
-  const splitPreview = splitLines(payload.cart, splitCount);
+  function handleSplitCountChange(n: number) {
+    setSplitCount(n);
+    setAllocation(initAllocation(payload.cart, n));
+  }
+
+  function setCell(itemIdx: number, groupIdx: number, raw: string) {
+    const parsed = parseInt(raw, 10);
+    const value = Number.isNaN(parsed) ? 0 : Math.max(0, Math.min(payload.cart[itemIdx].qty, parsed));
+    setAllocation((prev) => {
+      const next = prev.map((row) => [...row]);
+      next[itemIdx][groupIdx] = value;
+      return next;
+    });
+  }
+
+  // Each item row must be fully assigned before generating.
+  const rowRemaining = payload.cart.map((line, i) =>
+    line.qty - (allocation[i]?.reduce((s, v) => s + v, 0) ?? 0),
+  );
+  const isFullyAllocated = rowRemaining.every((r) => r === 0);
 
   async function handleGenerate() {
     setIsCreating(true);
 
-    const splitGroups = splitLines(payload.cart, splitCount);
-
     const results = await Promise.all(
-      splitGroups.map((groupLines, i) => {
-        const label = buildGroupLabel(i, splitCount, eventName);
+      Array.from({ length: splitCount }, (_, g) => {
+        const groupLines = buildGroupLines(payload.cart, allocation, g);
+        const label = buildGroupLabel(g, splitCount, eventName);
         return createCheckoutGroupAction({
           eventId: payload.eventId,
           txIds: payload.txIds,
@@ -143,9 +172,12 @@ export function CheckoutGroupDialog({
         </DialogHeader>
 
         {step === 1 && (
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="split-count">Number of groups</Label>
+          <div className="space-y-4">
+            {/* Group count picker */}
+            <div className="flex items-center gap-3">
+              <Label htmlFor="split-count" className="shrink-0">
+                Number of groups
+              </Label>
               <Input
                 id="split-count"
                 type="number"
@@ -154,34 +186,97 @@ export function CheckoutGroupDialog({
                 value={splitCount}
                 onChange={(e) => {
                   const v = Math.min(10, Math.max(1, parseInt(e.target.value, 10) || 1));
-                  setSplitCount(v);
+                  handleSplitCountChange(v);
                 }}
-                className="w-32"
+                className="w-24"
               />
-              <p className="text-sm text-muted-foreground">
-                {splitCount === 1
-                  ? `1 group — all ${payload.cart.length} item line${payload.cart.length !== 1 ? "s" : ""}`
-                  : splitPreview
-                      .map((g, i) => `Group ${i + 1}: ${g.length} item line${g.length !== 1 ? "s" : ""}`)
-                      .join(", ")}
-              </p>
             </div>
 
+            {/* Allocation table — hidden when only 1 group */}
+            {splitCount > 1 && (
+              <div className="overflow-x-auto rounded-md border">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="sticky left-0 bg-muted/50 px-3 py-2 text-left font-medium">
+                        Item
+                      </th>
+                      <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                        Total
+                      </th>
+                      {Array.from({ length: splitCount }, (_, g) => (
+                        <th key={g} className="px-3 py-2 text-center font-medium">
+                          G{g + 1}
+                        </th>
+                      ))}
+                      <th className="px-3 py-2 text-right font-medium text-muted-foreground">
+                        Left
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payload.cart.map((line, i) => {
+                      const remaining = rowRemaining[i];
+                      return (
+                        <tr key={line.itemId} className="border-b last:border-0">
+                          <td className="sticky left-0 bg-background px-3 py-1.5 font-medium max-w-[140px] truncate">
+                            {line.itemName}
+                          </td>
+                          <td className="px-3 py-1.5 text-right text-muted-foreground">
+                            {line.qty}
+                          </td>
+                          {Array.from({ length: splitCount }, (_, g) => (
+                            <td key={g} className="px-2 py-1.5 text-center">
+                              <Input
+                                type="number"
+                                min={0}
+                                max={line.qty}
+                                value={allocation[i]?.[g] ?? 0}
+                                onChange={(e) => setCell(i, g, e.target.value)}
+                                className="h-7 w-14 text-center px-1"
+                              />
+                            </td>
+                          ))}
+                          <td
+                            className={`px-3 py-1.5 text-right font-medium tabular-nums ${
+                              remaining !== 0
+                                ? "text-destructive"
+                                : "text-muted-foreground"
+                            }`}
+                          >
+                            {remaining}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {splitCount === 1 && (
+              <p className="text-sm text-muted-foreground">
+                1 group — all {payload.cart.length} item line
+                {payload.cart.length !== 1 ? "s" : ""}
+              </p>
+            )}
+
+            {splitCount > 1 && !isFullyAllocated && (
+              <p className="text-xs text-destructive">
+                Assign all items before generating. Items shown in red still have
+                unallocated quantity.
+              </p>
+            )}
+
             <div className="flex justify-between gap-2">
-              <Button
-                variant="ghost"
-                onClick={onDone}
-                disabled={isCreating}
-              >
+              <Button variant="ghost" onClick={onDone} disabled={isCreating}>
                 Skip
               </Button>
               <Button
                 onClick={handleGenerate}
-                disabled={isCreating}
+                disabled={isCreating || (splitCount > 1 && !isFullyAllocated)}
               >
-                {isCreating && (
-                  <Loader2 className="mr-2 size-4 animate-spin" />
-                )}
+                {isCreating && <Loader2 className="mr-2 size-4 animate-spin" />}
                 {isCreating ? "Creating…" : "Generate"}
               </Button>
             </div>
