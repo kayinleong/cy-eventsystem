@@ -166,13 +166,14 @@ export function CheckoutGroupDialog({
 
   return (
     <Dialog open onOpenChange={() => { /* intentionally no-op — use Skip / Done */ }}>
-      <DialogContent>
-        <DialogHeader>
+      <DialogContent className="flex flex-col max-w-[95vw] sm:max-w-2xl w-full max-h-[90vh] p-0 gap-0">
+        <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
           <DialogTitle>Group barcodes</DialogTitle>
         </DialogHeader>
 
         {step === 1 && (
-          <div className="space-y-4">
+          <div className="flex flex-col min-h-0 flex-1">
+            <div className="flex-1 overflow-y-auto px-6 py-2 space-y-4">
             {/* Group count picker */}
             <div className="flex items-center gap-3">
               <Label htmlFor="split-count" className="shrink-0">
@@ -267,24 +268,25 @@ export function CheckoutGroupDialog({
                 unallocated quantity.
               </p>
             )}
-
-            <div className="flex justify-between gap-2">
-              <Button variant="ghost" onClick={onDone} disabled={isCreating}>
-                Skip
-              </Button>
-              <Button
-                onClick={handleGenerate}
-                disabled={isCreating || (splitCount > 1 && !isFullyAllocated)}
-              >
-                {isCreating && <Loader2 className="mr-2 size-4 animate-spin" />}
-                {isCreating ? "Creating…" : "Generate"}
-              </Button>
-            </div>
+          </div>
+          <div className="shrink-0 flex justify-between gap-2 px-6 py-4 border-t">
+            <Button variant="ghost" onClick={onDone} disabled={isCreating}>
+              Skip
+            </Button>
+            <Button
+              onClick={handleGenerate}
+              disabled={isCreating || (splitCount > 1 && !isFullyAllocated)}
+            >
+              {isCreating && <Loader2 className="mr-2 size-4 animate-spin" />}
+              {isCreating ? "Creating…" : "Generate"}
+            </Button>
+          </div>
           </div>
         )}
 
         {step === 2 && (
-          <div className="space-y-4">
+          <div className="flex flex-col min-h-0 flex-1">
+            <div className="flex-1 overflow-y-auto px-6 py-2 space-y-4">
             <p className="text-sm text-muted-foreground">
               {groups.length === 1
                 ? "Your group barcode is ready to print."
@@ -328,9 +330,10 @@ export function CheckoutGroupDialog({
               </div>
             </div>
 
-            <div className="flex justify-end">
-              <Button onClick={onDone}>Done</Button>
-            </div>
+          </div>
+          <div className="shrink-0 flex justify-end px-6 py-4 border-t">
+            <Button onClick={onDone}>Done</Button>
+          </div>
           </div>
         )}
       </DialogContent>
