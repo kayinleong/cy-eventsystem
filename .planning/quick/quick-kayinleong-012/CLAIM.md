@@ -39,14 +39,32 @@ DO history (stamped deliveryOrderId + index + tab).
   `status-to-tone.ts`; `actionVerb("location")` + qty suppression in
   `ItemHistoryTab` & `EventHistoryTab`; new `DOHistoryTab` rendered as a
   History card on the DO detail page.
+- **Commit 5417392** (follow-up after runtime test): root cause of the
+  "not recognised" report confirmed — the client `getDoc(checkoutGroups/{id})`
+  throws `FirebaseError: Missing or insufficient permissions`. Diagnosis: the
+  deployed Firestore rules predate the local `firestore.rules` `checkoutGroups`
+  read allowance (client inventory/transaction reads work, only checkoutGroups
+  denied → stale deployment), compounded by the client read not being gated on
+  auth readiness. Added read-only `resolveLocationBarcodeAction` (Admin SDK,
+  server session) mirroring the update resolver, and switched `LocationPanel`
+  to it — preview now resolves regardless of deployed-rule state or auth
+  timing. Removed the `firebase/client` + `firebase/firestore` imports from the
+  panel. The earlier minimal client patch (Commit 42dd45e) remains as the
+  error/empty-group UX layer on top of the now-reliable resolution.
 
 ## Verification
-**Automated**
+**Automated** (re-run after the 5417392 follow-up)
 - `npx tsc --noEmit` → exit 0.
 - `npm run lint` → 0 errors, 12 warnings (all pre-existing TanStack/React-
-  Compiler `incompatible-library` warnings in report/table components; none in
-  files touched by this claim).
+  Compiler warnings in report/table components; none in files touched by this
+  claim).
 - `npm run build` → exit 0, all 28 routes compiled.
+
+**Runtime**
+- Browser console confirmed the pre-fix failure path: `[LocationPanel]
+  checkoutGroups lookup failed: FirebaseError: Missing or insufficient
+  permissions.` (the error our Commit-42dd45e logging surfaced). The 5417392
+  follow-up moves resolution to the Admin SDK, removing the client read.
 
 **Regression surface audited (per diff hunk)**
 - `TransactionDoc` field add (`deliveryOrderId`): the two server `toTx`
@@ -75,13 +93,15 @@ DO history (stamped deliveryOrderId + index + tab).
   barcode → preview resolves (no false "not recognised") → submit updates
   location; confirm a "Location" row appears in Item history, Event history
   (group barcode), and the new DO history card.
-- **Open data caveat (Concern 1):** the code paths for group resolution in
-  Location vs check-in mode are identical and the rules already permit client
-  reads, so the reported "not recognised" is one of: (a) a swallowed `getDoc`
-  error (e.g. an auth-readiness race) — now surfaced as a retry message +
-  console error; (b) a group with empty `itemLines` — now treated as a
-  recognised, submittable group; or (c) a genuinely missing/orphaned
-  `checkoutGroups` doc — which no client patch can resolve and would surface as
-  "Group has no items." on submit. If the symptom persists after this fix,
-  capture the browser console error (now logged) to distinguish (a) from (c).
+- **Concern 1 — RESOLVED at root.** Runtime test proved the cause was a client
+  Firestore permission denial on `checkoutGroups` (stale deployed rules + an
+  ungated client read). The 5417392 follow-up resolves the preview server-side
+  (Admin SDK), so the feature no longer depends on the client read. Recommended
+  hygiene (not required for the fix): `firebase deploy --only firestore:rules`
+  so the deployed rules match `firestore.rules`.
+- **Separate issue observed (NOT in this claim's scope):** the auth middleware
+  logged `[auth proxy error] ... Key for the RS256 algorithm must be one of
+  type KeyObject, CryptoKey, or JSON Web Key. Received an instance of
+  Uint8Array` at `proxy.ts:24`. This is a `next-firebase-auth-edge` cookie-key
+  config problem, unrelated to the location fix. Flagged for a separate claim.
 
