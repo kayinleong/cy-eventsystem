@@ -1,14 +1,10 @@
-// Phase 2 — Event detail "History" tab (Block D UI swap, plan 02-07).
+// quick-kayinleong-012 — Delivery Order "History" feed.
 //
-// REQUIREMENTS:
-//   - AUD-03 — chronological transactions for the event (newest first).
-//   - AUD-01 — each row shows the actor's role at write-time (the denormalized
-//     `actorRoleAtTimeOfAction` snapshot from the transaction record).
-//
-// Subscribes to the transactions collection via useTransactionsLive scoped
-// to {eventId} so any later mutation (checkout, checkin, missing,
-// cancellation) re-renders the feed without a server roundtrip. Mirrors the
-// inventory ItemHistoryTab shape from plan 02-06.
+// Location updates made via Scan → Location against one of this DO's group
+// barcodes stamp the owning `deliveryOrderId` on their transaction (see
+// app/(app)/scan/actions.ts). This client island subscribes to those rows via
+// useTransactionsLive({ deliveryOrderId }) — composite index
+// transactions(deliveryOrderId, at desc) declared in firestore.indexes.json.
 
 "use client";
 
@@ -41,17 +37,15 @@ function actionVerb(type: string): string {
   }
 }
 
-export function EventHistoryTab({ eventId }: { eventId: string }) {
-  // Composite index transactions(eventId, at desc) from plan 02-02 covers
-  // this query. 100-row limit is enough for typical event audit history.
-  const txs = useTransactionsLive({ eventId, limit: 100 });
+export function DOHistoryTab({ doId }: { doId: string }) {
+  const txs = useTransactionsLive({ deliveryOrderId: doId, limit: 100 });
 
   if (txs.length === 0) {
     return (
       <EmptyState
         icon={Activity}
         heading="No activity yet"
-        body="Transactions for this event will appear here."
+        body="Location updates for this delivery order's items will appear here."
       />
     );
   }
@@ -66,10 +60,10 @@ export function EventHistoryTab({ eventId }: { eventId: string }) {
           <div className="flex-1 min-w-0">
             <p className="text-sm">
               <span className="font-medium">{t.actorName}</span>{" "}
-              {actionVerb(t.type)}{" "}
+              {actionVerb(t.type)}
               {t.type === "location" ? (
                 <>
-                  {"of "}
+                  {" of "}
                   <Link
                     href={`/inventory/${t.itemId}`}
                     className="hover:underline"
@@ -79,6 +73,7 @@ export function EventHistoryTab({ eventId }: { eventId: string }) {
                 </>
               ) : (
                 <>
+                  {" "}
                   <span className="font-medium">{t.qty}</span>
                   {" × "}
                   <Link

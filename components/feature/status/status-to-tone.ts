@@ -29,7 +29,8 @@ export type DomainStatus =
   // transaction types
   | "checkout"
   | "checkin"
-  | "adjustment";
+  | "adjustment"
+  | "location";
 
 /**
  * statusToTone — maps every domain status string to its UI-SPEC tone.
@@ -71,7 +72,8 @@ export function statusToTone(status: string): StatusTone {
     status === "found" ||
     status === "writtenOff" ||
     status === "checkin" ||
-    status === "adjustment"
+    status === "adjustment" ||
+    status === "location"
   ) {
     return "muted";
   }
@@ -126,6 +128,8 @@ export function statusToLabel(status: string): string {
       return "Check-in";
     case "adjustment":
       return "Adjustment";
+    case "location":
+      return "Location";
     default:
       return status;
   }

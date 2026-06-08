@@ -38,6 +38,8 @@ function actionVerb(type: string): string {
       return "flagged missing";
     case "adjustment":
       return "adjusted";
+    case "location":
+      return "updated location";
     default:
       return type;
   }
@@ -66,8 +68,13 @@ export function ItemHistoryTab({ itemId }: { itemId: string }) {
           <div className="flex-1 min-w-0">
             <p className="text-sm">
               <span className="font-medium">{t.actorName}</span>{" "}
-              {actionVerb(t.type)}{" "}
-              <span className="font-medium">{t.qty}</span>
+              {actionVerb(t.type)}
+              {t.type === "location" ? null : (
+                <>
+                  {" "}
+                  <span className="font-medium">{t.qty}</span>
+                </>
+              )}
               {t.eventId ? (
                 <>
                   {" for "}

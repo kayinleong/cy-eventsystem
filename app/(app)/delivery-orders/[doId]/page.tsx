@@ -16,6 +16,7 @@ import { adminDb } from "@/lib/firebase/admin";
 import type { DeliveryOrderType } from "@/lib/types/delivery-order";
 import { DoTypeBadge } from "@/components/feature/delivery-orders/DoTypeBadge";
 import { DODetailActions } from "@/components/feature/delivery-orders/DODetailActions";
+import { DOHistoryTab } from "@/components/feature/delivery-orders/DOHistoryTab";
 
 type RouteProps = { params: Promise<{ doId: string }> };
 
@@ -298,6 +299,15 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">History</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DOHistoryTab doId={doc.id} />
+        </CardContent>
+      </Card>
 
       {doc.notes ? (
         <Card>
