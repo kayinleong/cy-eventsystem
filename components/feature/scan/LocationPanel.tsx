@@ -38,11 +38,25 @@ import {
 
 type PreviewItem = { id: string; name: string; sku: string };
 
+// `recognised` — the barcode mapped to a known item OR an existing group doc.
+//   A group with an empty itemLines snapshot is still recognised: the Server
+//   Action resolves the authoritative member list at submit.
+// `lookupError` — the Firestore group probe threw. Distinct from "unknown" so
+//   the UI can tell the user to retry instead of falsely claiming the code
+//   isn't in the system.
+type PreviewState = {
+  barcode: string;
+  items: PreviewItem[];
+  isGroup: boolean;
+  recognised: boolean;
+  lookupError: boolean;
+};
+
 type PanelState =
   | { phase: "idle" }
   | { phase: "resolving"; barcode: string }
-  | { phase: "preview"; barcode: string; items: PreviewItem[]; isGroup: boolean }
-  | { phase: "submitting"; barcode: string; items: PreviewItem[]; isGroup: boolean };
+  | ({ phase: "preview" } & PreviewState)
+  | ({ phase: "submitting" } & PreviewState);
 
 export function LocationPanel() {
   // useInventoryLive returns InventoryItem[] directly (not { items: ... }).
@@ -67,6 +81,8 @@ export function LocationPanel() {
         barcode: trimmed,
         items: [{ id: matched.id, name: matched.name, sku: matched.sku }],
         isGroup: false,
+        recognised: true,
+        lookupError: false,
       });
       setLocationValue("");
       return;
@@ -85,21 +101,47 @@ export function LocationPanel() {
           name: l.itemName ?? l.itemId,
           sku: l.itemSku ?? l.itemId,
         }));
-        setState({ phase: "preview", barcode: trimmed, items: groupItems, isGroup: true });
+        // Recognised as a group even when itemLines is empty (older groups) —
+        // the Server Action resolves the full member list authoritatively.
+        setState({
+          phase: "preview",
+          barcode: trimmed,
+          items: groupItems,
+          isGroup: true,
+          recognised: true,
+          lookupError: false,
+        });
         return;
       }
-    } catch {
-      // Firestore read failed — fall through to unrecognised
+    } catch (err) {
+      // Surface the failed probe instead of silently reporting "not recognised".
+      console.error("[LocationPanel] checkoutGroups lookup failed:", err);
+      setState({
+        phase: "preview",
+        barcode: trimmed,
+        items: [],
+        isGroup: false,
+        recognised: false,
+        lookupError: true,
+      });
+      return;
     }
 
     // 3. Not found anywhere
-    setState({ phase: "preview", barcode: trimmed, items: [], isGroup: false });
+    setState({
+      phase: "preview",
+      barcode: trimmed,
+      items: [],
+      isGroup: false,
+      recognised: false,
+      lookupError: false,
+    });
   }
 
   async function handleSubmit() {
     if (state.phase !== "preview") return;
-    const { barcode, items: previewItems, isGroup } = state;
-    setState({ phase: "submitting", barcode, items: previewItems, isGroup });
+    const { barcode, items: previewItems, isGroup, recognised, lookupError } = state;
+    setState({ phase: "submitting", barcode, items: previewItems, isGroup, recognised, lookupError });
     const result: UpdateItemsLocationResult = await updateItemsLocationAction({
       barcodeValue: barcode,
       location: locationValue.trim(),
@@ -112,7 +154,7 @@ export function LocationPanel() {
       setLocationValue("");
     } else {
       toast.error("Update failed", { description: result.error });
-      setState({ phase: "preview", barcode, items: previewItems, isGroup });
+      setState({ phase: "preview", barcode, items: previewItems, isGroup, recognised, lookupError });
     }
   }
 
@@ -183,6 +225,19 @@ export function LocationPanel() {
                 ))}
               </ul>
             </div>
+          ) : state.recognised && state.isGroup ? (
+            // Group resolved but its itemLines snapshot is empty — still valid.
+            // The Server Action expands the group and updates every member.
+            <div className="flex items-start gap-2 rounded-md bg-amber-500/10 border border-amber-500/30 p-2 text-xs text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
+              Group barcode recognised — all items in this group will have their
+              location updated on confirm.
+            </div>
+          ) : state.lookupError ? (
+            <p className="text-sm text-muted-foreground">
+              Couldn&apos;t look up that barcode. Check your connection and try
+              again.
+            </p>
           ) : (
             <p className="text-sm text-muted-foreground">
               Barcode not recognised — check the value and try again.
@@ -206,7 +261,7 @@ export function LocationPanel() {
           <div className="flex gap-3">
             <Button
               onClick={handleSubmit}
-              disabled={isSubmitting || locationValue.trim() === "" || state.items.length === 0}
+              disabled={isSubmitting || locationValue.trim() === "" || !state.recognised}
             >
               {isSubmitting ? "Updating…" : "Update location"}
             </Button>
