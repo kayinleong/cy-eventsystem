@@ -8,9 +8,11 @@
 // Resolution UX:
 //   - Show a preview of matched items BEFORE the user types a location.
 //   - Individual items: resolved from useInventoryLive snapshot (instant).
-//   - Group barcodes: not in the inventory snapshot; show a "Could be a group
-//     barcode — confirm below to resolve." placeholder. The Server Action
-//     resolves the group and the success toast reports how many items updated.
+//   - Anything not in the snapshot (group barcodes, items outside the 500-row
+//     window) is resolved via resolveLocationBarcodeAction (Admin SDK, server
+//     session). quick-kayinleong-012: this replaced a client checkoutGroups
+//     getDoc that was denied unless the deployed rules granted the read and was
+//     subject to a client-auth-readiness race.
 //
 // Pitfall 3 avoidance: passes eventRequired={false} to ScannerWidget so the
 // camera activates without a selected event.
@@ -20,7 +22,6 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { MapPin, CheckCircle, AlertTriangle, Loader2 } from "lucide-react";
-import { doc, getDoc } from "firebase/firestore";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,10 +30,10 @@ import { Badge } from "@/components/ui/badge";
 
 import { ScannerWidget } from "./ScannerWidget";
 import { ManualEntryInput } from "./ManualEntryInput";
-import { db } from "@/lib/firebase/client";
 import { useInventoryLive } from "@/lib/hooks/use-inventory-live";
 import {
   updateItemsLocationAction,
+  resolveLocationBarcodeAction,
   type UpdateItemsLocationResult,
 } from "@/app/(app)/scan/actions";
 
@@ -88,34 +89,39 @@ export function LocationPanel() {
       return;
     }
 
-    // 2. Could be a group barcode — resolve it from Firestore so the user
-    //    sees exactly which items will be updated before confirming.
+    // 2. Not in the live snapshot — resolve via the Server Action (Admin SDK).
+    //    Resolving server-side avoids the client checkoutGroups read, which is
+    //    denied unless the deployed rules grant it and is subject to a
+    //    client-auth-readiness race.
     setState({ phase: "resolving", barcode: trimmed });
     setLocationValue("");
     try {
-      const groupSnap = await getDoc(doc(db, "checkoutGroups", trimmed));
-      if (groupSnap.exists()) {
-        const data = groupSnap.data() as { itemLines?: { itemId: string; itemName: string; itemSku: string }[] };
-        const groupItems: PreviewItem[] = (data.itemLines ?? []).map((l) => ({
-          id: l.itemId,
-          name: l.itemName ?? l.itemId,
-          sku: l.itemSku ?? l.itemId,
-        }));
-        // Recognised as a group even when itemLines is empty (older groups) —
-        // the Server Action resolves the full member list authoritatively.
+      const result = await resolveLocationBarcodeAction(trimmed);
+      if (result.ok) {
+        // A group is recognised even when its itemLines snapshot is empty —
+        // the update action expands the full member list authoritatively.
         setState({
           phase: "preview",
           barcode: trimmed,
-          items: groupItems,
-          isGroup: true,
+          items: result.items,
+          isGroup: result.resolvedAs === "group",
           recognised: true,
           lookupError: false,
         });
         return;
       }
+      // Recognised nowhere.
+      setState({
+        phase: "preview",
+        barcode: trimmed,
+        items: [],
+        isGroup: false,
+        recognised: false,
+        lookupError: false,
+      });
     } catch (err) {
-      // Surface the failed probe instead of silently reporting "not recognised".
-      console.error("[LocationPanel] checkoutGroups lookup failed:", err);
+      // Surface the failure instead of silently reporting "not recognised".
+      console.error("[LocationPanel] barcode resolve failed:", err);
       setState({
         phase: "preview",
         barcode: trimmed,
@@ -124,18 +130,7 @@ export function LocationPanel() {
         recognised: false,
         lookupError: true,
       });
-      return;
     }
-
-    // 3. Not found anywhere
-    setState({
-      phase: "preview",
-      barcode: trimmed,
-      items: [],
-      isGroup: false,
-      recognised: false,
-      lookupError: false,
-    });
   }
 
   async function handleSubmit() {

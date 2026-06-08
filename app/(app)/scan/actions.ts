@@ -41,6 +41,11 @@ export type UpdateItemsLocationResult =
   | { ok: true; updatedItemIds: string[]; resolvedAs: "item" | "group" }
   | { ok: false; error: string };
 
+export type ResolveLocationBarcodeItem = { id: string; name: string; sku: string };
+export type ResolveLocationBarcodeResult =
+  | { ok: true; resolvedAs: "item" | "group"; items: ResolveLocationBarcodeItem[] }
+  | { ok: false };
+
 export async function updateItemsLocationAction(
   input: unknown,
 ): Promise<UpdateItemsLocationResult> {
@@ -202,4 +207,86 @@ export async function updateItemsLocationAction(
 
   // T-007-04 — same message for all non-match cases (no information disclosure)
   return { ok: false, error: "Barcode not recognised." };
+}
+
+// quick-kayinleong-012 — read-only preview resolver for Scan → Location.
+//
+// The Location panel previously probed `checkoutGroups` with the client Web
+// SDK, which is denied unless the *deployed* Firestore rules grant the read —
+// and is also subject to a client-auth-readiness race. Resolving here (Admin
+// SDK, server session) makes the preview work regardless of deployed-rule
+// state or auth timing, mirroring updateItemsLocationAction's resolution order
+// without writing anything.
+export async function resolveLocationBarcodeAction(
+  barcodeValue: unknown,
+): Promise<ResolveLocationBarcodeResult> {
+  await requireSession();
+  const trimmed = typeof barcodeValue === "string" ? barcodeValue.trim() : "";
+  if (!trimmed) return { ok: false };
+
+  // Step 1: SKU / doc ID direct read.
+  const itemSnap = await adminDb.collection("inventory").doc(trimmed).get();
+  if (itemSnap.exists) {
+    const d = itemSnap.data()!;
+    return {
+      ok: true,
+      resolvedAs: "item",
+      items: [
+        {
+          id: trimmed,
+          name: (d.name as string) ?? trimmed,
+          sku: (d.sku as string) ?? trimmed,
+        },
+      ],
+    };
+  }
+
+  // Step 2: externalBarcode field match.
+  const extSnap = await adminDb
+    .collection("inventory")
+    .where("externalBarcode", "==", trimmed)
+    .limit(1)
+    .get();
+  if (!extSnap.empty) {
+    const doc = extSnap.docs[0];
+    const d = doc.data();
+    return {
+      ok: true,
+      resolvedAs: "item",
+      items: [
+        {
+          id: doc.id,
+          name: (d.name as string) ?? doc.id,
+          sku: (d.sku as string) ?? doc.id,
+        },
+      ],
+    };
+  }
+
+  // Step 3: checkoutGroups doc ID — recognised even if itemLines is empty
+  // (updateItemsLocationAction expands the group authoritatively at submit).
+  const groupSnap = await adminDb
+    .collection("checkoutGroups")
+    .doc(trimmed)
+    .get();
+  if (groupSnap.exists) {
+    const lines =
+      (groupSnap.data()!.itemLines as
+        | { itemId: string; itemSku?: string; itemName?: string }[]
+        | undefined) ?? [];
+    const seen = new Set<string>();
+    const items: ResolveLocationBarcodeItem[] = [];
+    for (const l of lines) {
+      if (seen.has(l.itemId)) continue;
+      seen.add(l.itemId);
+      items.push({
+        id: l.itemId,
+        name: l.itemName ?? l.itemId,
+        sku: l.itemSku ?? l.itemId,
+      });
+    }
+    return { ok: true, resolvedAs: "group", items };
+  }
+
+  return { ok: false };
 }
