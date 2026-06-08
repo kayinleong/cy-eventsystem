@@ -70,6 +70,7 @@ function toTx(d: QueryDocumentSnapshot): TransactionDoc {
     notes: data.notes ?? "",
     parentTxId: data.parentTxId ?? null,
     clientTxId: data.clientTxId ?? null,
+    deliveryOrderId: data.deliveryOrderId ?? null,
   };
 }
 
@@ -78,6 +79,7 @@ export type UseTransactionsLiveOpts = {
   eventId?: string;
   actorUid?: string;
   type?: TransactionType;
+  deliveryOrderId?: string;
   limit?: number;
   initial?: TransactionDoc[];
 };
@@ -111,6 +113,8 @@ export function useTransactionsLive(
       if (opts.eventId) constraints.push(where("eventId", "==", opts.eventId));
       if (opts.actorUid) constraints.push(where("actorUid", "==", opts.actorUid));
       if (opts.type) constraints.push(where("type", "==", opts.type));
+      if (opts.deliveryOrderId)
+        constraints.push(where("deliveryOrderId", "==", opts.deliveryOrderId));
       constraints.push(orderBy("at", "desc"), fbLimit(opts.limit ?? 50));
 
       const q = query(collection(db, "transactions"), ...constraints);
@@ -133,7 +137,14 @@ export function useTransactionsLive(
       if (unsubSnap) unsubSnap();
       unsubAuth();
     };
-  }, [opts.itemId, opts.eventId, opts.actorUid, opts.type, opts.limit]);
+  }, [
+    opts.itemId,
+    opts.eventId,
+    opts.actorUid,
+    opts.type,
+    opts.deliveryOrderId,
+    opts.limit,
+  ]);
 
   return txs;
 }

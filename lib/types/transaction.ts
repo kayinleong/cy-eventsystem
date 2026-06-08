@@ -14,7 +14,9 @@ export type TransactionType =
   | "checkout"
   | "checkin"
   | "adjustment"
-  | "missing";
+  | "missing"
+  // quick-kayinleong-012 — an item's location was changed via Scan → Location.
+  | "location";
 
 export type TransactionDoc = {
   id: string;
@@ -35,4 +37,8 @@ export type TransactionDoc = {
   parentTxId: string | null;
   // Optional client-supplied idempotency key for retries.
   clientTxId: string | null;
+  // quick-kayinleong-012 — set on `location` transactions resolved via a group
+  // barcode, so the DO detail page can show its own location-update history.
+  // Null for item-barcode location updates and all non-location transactions.
+  deliveryOrderId: string | null;
 };

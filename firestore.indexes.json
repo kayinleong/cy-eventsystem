@@ -256,6 +256,25 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "deliveryOrderId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "transactions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "eventId",
           "order": "ASCENDING"
         },

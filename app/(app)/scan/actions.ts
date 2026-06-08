@@ -17,6 +17,12 @@
 //   - requireSession() at entry → unauthenticated calls throw before any read.
 //   - Zod schema validates barcodeValue (non-empty) and location (max 100 chars)
 //     before any Firestore write.
+//
+// quick-kayinleong-012 — each update also writes a `location` transaction per
+// affected item in the SAME write batch (atomic with the inventory update).
+// Group-barcode resolutions stamp eventId/eventName and the owning
+// deliveryOrderId so the move surfaces in Item, Event, and DO history; item
+// barcodes leave those null (Item history only).
 
 "use server";
 
@@ -45,14 +51,42 @@ export async function updateItemsLocationAction(
   }
   const { barcodeValue, location } = parsed.data;
 
+  // quick-kayinleong-012 — every location change writes a `location`
+  // transaction alongside the inventory update (same batch → atomic, matching
+  // the app's audit-log invariant). qty is 0; location moves have no quantity.
+  const txNote = location ? `Location set to "${location}"` : "Location cleared";
+  function locationTxFields() {
+    return {
+      type: "location" as const,
+      qty: 0,
+      actorUid: session.uid,
+      actorName: session.displayName,
+      actorRoleAtTimeOfAction: session.role,
+      at: FieldValue.serverTimestamp(),
+      notes: txNote,
+      parentTxId: null,
+      clientTxId: null,
+    };
+  }
+
   // Step 1: Try SKU / doc ID direct read (O(1) — SKU === doc ID per PROJECT.md)
   const itemSnap = await adminDb.collection("inventory").doc(barcodeValue).get();
   if (itemSnap.exists) {
+    const data = itemSnap.data()!;
     const batch = adminDb.batch();
     batch.update(adminDb.collection("inventory").doc(barcodeValue), {
       location,
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: session.uid,
+    });
+    batch.set(adminDb.collection("transactions").doc(), {
+      ...locationTxFields(),
+      itemId: barcodeValue,
+      itemSku: (data.sku as string) ?? barcodeValue,
+      itemName: (data.name as string) ?? barcodeValue,
+      eventId: null,
+      eventName: null,
+      deliveryOrderId: null,
     });
     await batch.commit();
     revalidatePath("/inventory");
@@ -68,11 +102,21 @@ export async function updateItemsLocationAction(
     .get();
   if (!extSnap.empty) {
     const doc = extSnap.docs[0];
+    const data = doc.data();
     const batch = adminDb.batch();
     batch.update(adminDb.collection("inventory").doc(doc.id), {
       location,
       updatedAt: FieldValue.serverTimestamp(),
       updatedBy: session.uid,
+    });
+    batch.set(adminDb.collection("transactions").doc(), {
+      ...locationTxFields(),
+      itemId: doc.id,
+      itemSku: (data.sku as string) ?? doc.id,
+      itemName: (data.name as string) ?? doc.id,
+      eventId: null,
+      eventName: null,
+      deliveryOrderId: null,
     });
     await batch.commit();
     revalidatePath("/inventory");
@@ -86,19 +130,66 @@ export async function updateItemsLocationAction(
     .doc(barcodeValue)
     .get();
   if (groupSnap.exists) {
-    const group = groupSnap.data() as { itemLines?: { itemId: string }[] };
-    const itemIds = [
-      ...new Set((group.itemLines ?? []).map((l) => l.itemId)),
-    ];
+    const group = groupSnap.data() as {
+      eventId?: string;
+      itemLines?: { itemId: string; itemSku?: string; itemName?: string }[];
+    };
+    // Unique itemId → { sku, name } from the group's line snapshot, so each
+    // location transaction carries the item identity for the history feeds.
+    const itemMeta = new Map<string, { sku: string; name: string }>();
+    for (const l of group.itemLines ?? []) {
+      if (!itemMeta.has(l.itemId)) {
+        itemMeta.set(l.itemId, {
+          sku: l.itemSku ?? l.itemId,
+          name: l.itemName ?? l.itemId,
+        });
+      }
+    }
+    const itemIds = [...itemMeta.keys()];
     if (itemIds.length === 0) {
       return { ok: false, error: "Group has no items." };
     }
+
+    // Best-effort event + DO attribution so the move shows in Event and DO
+    // history. A lookup miss leaves the field null — it never blocks the
+    // location update itself.
+    const eventId = group.eventId ?? null;
+    let eventName: string | null = null;
+    let deliveryOrderId: string | null = null;
+    try {
+      if (eventId) {
+        const evSnap = await adminDb.collection("events").doc(eventId).get();
+        eventName = (evSnap.data()?.name as string) ?? null;
+      }
+      const doSnap = await adminDb
+        .collection("deliveryOrders")
+        .where("checkoutGroupIds", "array-contains", barcodeValue)
+        .limit(1)
+        .get();
+      if (!doSnap.empty) deliveryOrderId = doSnap.docs[0].id;
+    } catch (err) {
+      console.error(
+        "[updateItemsLocationAction] event/DO attribution failed:",
+        err,
+      );
+    }
+
     const batch = adminDb.batch();
     for (const itemId of itemIds) {
+      const meta = itemMeta.get(itemId)!;
       batch.update(adminDb.collection("inventory").doc(itemId), {
         location,
         updatedAt: FieldValue.serverTimestamp(),
         updatedBy: session.uid,
+      });
+      batch.set(adminDb.collection("transactions").doc(), {
+        ...locationTxFields(),
+        itemId,
+        itemSku: meta.sku,
+        itemName: meta.name,
+        eventId,
+        eventName,
+        deliveryOrderId,
       });
     }
     await batch.commit();
