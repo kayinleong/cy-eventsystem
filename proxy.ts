@@ -96,6 +96,10 @@ export const config = {
     // route handler runs.
     "/api/auth/:path*",
     // All app routes except static + image opt + favicon + PWA metadata.
-    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|robots.txt).*)",
+    // The Telegram webhook path is also excluded below: its POST is
+    // cookieless and must bypass auth — verified instead via the setWebhook
+    // secret-token header + chat allowlist (quick-kayinleong-018). Without
+    // the exclusion the webhook would be 307-redirected to /login and never run.
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|robots.txt|api/telegram).*)",
   ],
 };
