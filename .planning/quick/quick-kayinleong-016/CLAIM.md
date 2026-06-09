@@ -3,7 +3,8 @@
 - session: claude-code
 - branch: main
 - started: 2026-06-09
-- status: in-progress
+- status: done
+- completed: 2026-06-09
 - summary: Location history rows only say `Location set to "AAA"`. Add quantity, which DO, and which group barcode to the group-scan location transaction notes.
 
 ## What will change
@@ -27,7 +28,39 @@ Structured `qty` on the tx stays 0 (location-move invariant, display-suppressed)
 the human-readable count goes in notes. No display-component or schema change.
 
 ## What has changed
-_To be filled during execution._
+
+**Commit 95459e6** (feat, 1 file — `app/(app)/scan/actions.ts`):
+- Group branch of `updateItemsLocationAction`:
+  - `itemMeta` now also sums per-item `qty` from `group.itemLines`; captured
+    `group.label`.
+  - The existing DO array-contains lookup now also reads `vendor`
+    (`deliveryOrderVendor`).
+  - New `noteFor(qty)` builds the per-item notes string:
+    `Location set to "X" · {qty} unit(s) · Group: {label} · Barcode: {groupId} · DO: {vendor}`
+    (each segment omitted when its data is absent); written as the tx `notes`,
+    overriding the generic `txNote`.
+- Item branches (Step 1/2) and the structured tx `qty` (0, display-suppressed)
+  are unchanged.
 
 ## Verification
-_To be filled before marking done._
+
+**Automated**
+- `npx tsc --noEmit` → exit 0.
+- `npm run lint` → 0 errors, 12 warnings (all pre-existing).
+- `npm run build` → exit 0, all routes compiled.
+
+**Regression surface audited**
+- Change is confined to the GROUP branch's notes construction; the
+  `checkoutGroups.location` write (quick-015), the per-member tx writes, the
+  atomic batch, and event/DO stamping are unchanged.
+- Individual-item Location scans still use the plain `Location set to "X"` note.
+- No schema/type change, no display-component change (history already renders
+  `notes`), no index/rules change. Structured tx `qty` stays 0 so no qty
+  aggregation is affected — the count is shown via notes only.
+- Best-effort DO/event lookup still wrapped in try/catch — a miss leaves
+  vendor/DO out of the note, never blocks the location update.
+
+**Manual UI confirmation (recommended, needs Firebase env):** scan a group
+barcode (e.g. Group 1 of a DO holding SHURE-001 × 5) → set "AAA". The Location
+history row (Item/Event/DO) should read:
+`Location set to "AAA" · 5 units · Group: Group 1 of 2 — ADA 2026 · Barcode: peUu… · DO: <vendor>`.
