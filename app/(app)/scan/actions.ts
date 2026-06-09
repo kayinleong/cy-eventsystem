@@ -41,7 +41,10 @@ export type UpdateItemsLocationResult =
   | { ok: true; updatedItemIds: string[]; resolvedAs: "item" | "group" }
   | { ok: false; error: string };
 
-export type ResolveLocationBarcodeItem = { id: string; name: string; sku: string };
+// quick-kayinleong-014 — `qty` carries the group line quantity so the Location
+// preview can show how many physical units a group barcode covers (location is
+// stored per-SKU, but the user thinks in units). Individual-item scans use 1.
+export type ResolveLocationBarcodeItem = { id: string; name: string; sku: string; qty: number };
 export type ResolveLocationBarcodeResult =
   | { ok: true; resolvedAs: "item" | "group"; items: ResolveLocationBarcodeItem[] }
   | { ok: false };
@@ -249,6 +252,7 @@ export async function resolveLocationBarcodeAction(
           id: trimmed,
           name: (d.name as string) ?? trimmed,
           sku: (d.sku as string) ?? trimmed,
+          qty: 1,
         },
       ],
     };
@@ -271,6 +275,7 @@ export async function resolveLocationBarcodeAction(
           id: doc.id,
           name: (d.name as string) ?? doc.id,
           sku: (d.sku as string) ?? doc.id,
+          qty: 1,
         },
       ],
     };
@@ -285,20 +290,25 @@ export async function resolveLocationBarcodeAction(
   if (groupSnap.exists) {
     const lines =
       (groupSnap.data()!.itemLines as
-        | { itemId: string; itemSku?: string; itemName?: string }[]
+        | { itemId: string; itemSku?: string; itemName?: string; qty?: number }[]
         | undefined) ?? [];
-    const seen = new Set<string>();
-    const items: ResolveLocationBarcodeItem[] = [];
+    // quick-kayinleong-014 — sum qty per itemId so the preview reflects the
+    // group's total units (e.g. SHURE-001 × 5), not just the distinct-SKU count.
+    const byId = new Map<string, ResolveLocationBarcodeItem>();
     for (const l of lines) {
-      if (seen.has(l.itemId)) continue;
-      seen.add(l.itemId);
-      items.push({
+      const existing = byId.get(l.itemId);
+      if (existing) {
+        existing.qty += l.qty ?? 0;
+        continue;
+      }
+      byId.set(l.itemId, {
         id: l.itemId,
         name: l.itemName ?? l.itemId,
         sku: l.itemSku ?? l.itemId,
+        qty: l.qty ?? 0,
       });
     }
-    return { ok: true, resolvedAs: "group", items };
+    return { ok: true, resolvedAs: "group", items: [...byId.values()] };
   }
 
   return { ok: false };

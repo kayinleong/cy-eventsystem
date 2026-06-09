@@ -37,7 +37,9 @@ import {
   type UpdateItemsLocationResult,
 } from "@/app/(app)/scan/actions";
 
-type PreviewItem = { id: string; name: string; sku: string };
+// quick-kayinleong-014 — `qty` is the group line quantity (units), so the
+// preview can report total units rather than distinct-SKU count.
+type PreviewItem = { id: string; name: string; sku: string; qty: number };
 
 // `recognised` — the barcode mapped to a known item OR an existing group doc.
 //   A group with an empty itemLines snapshot is still recognised: the Server
@@ -80,7 +82,7 @@ export function LocationPanel() {
       setState({
         phase: "preview",
         barcode: trimmed,
-        items: [{ id: matched.id, name: matched.name, sku: matched.sku }],
+        items: [{ id: matched.id, name: matched.name, sku: matched.sku, qty: 1 }],
         isGroup: false,
         recognised: true,
         lookupError: false,
@@ -142,8 +144,14 @@ export function LocationPanel() {
       location: locationValue.trim(),
     });
     if (result.ok) {
+      // quick-kayinleong-014 — report total units for groups (sum of the
+      // preview line quantities); fall back to the distinct-item count when the
+      // group's itemLines snapshot was empty or qty data is missing.
+      const previewQty = previewItems.reduce((sum, i) => sum + (i.qty ?? 0), 0);
+      const count =
+        isGroup && previewQty > 0 ? previewQty : result.updatedItemIds.length;
       toast.success("Location updated", {
-        description: `${result.updatedItemIds.length} item(s) → "${locationValue.trim()}"`,
+        description: `${count} item(s) → "${locationValue.trim()}"`,
       });
       setState({ phase: "idle" });
       setLocationValue("");
@@ -196,30 +204,47 @@ export function LocationPanel() {
 
           {/* Item preview */}
           {state.items.length > 0 ? (
-            <div className="space-y-2">
-              <p className="text-sm font-medium">
-                {state.isGroup
-                  ? `Group barcode — ${state.items.length} item${state.items.length !== 1 ? "s" : ""} will be updated`
-                  : `Item${state.items.length > 1 ? "s" : ""} to update`}
-              </p>
-              {state.isGroup && (
-                <div className="flex items-start gap-2 rounded-md bg-amber-500/10 border border-amber-500/30 p-2 text-xs text-amber-600 dark:text-amber-400">
-                  <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
-                  All {state.items.length} items in this group will have their location updated.
+            (() => {
+              // quick-kayinleong-014 — a group covers `qty` units per SKU; show
+              // the total units (fallback to distinct-SKU count for older group
+              // docs whose itemLines lack qty).
+              const totalQty = state.items.reduce(
+                (sum, i) => sum + (i.qty ?? 0),
+                0,
+              );
+              const groupCount = totalQty > 0 ? totalQty : state.items.length;
+              return (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">
+                    {state.isGroup
+                      ? `Group barcode — ${groupCount} item${groupCount !== 1 ? "s" : ""} will be updated`
+                      : `Item${state.items.length > 1 ? "s" : ""} to update`}
+                  </p>
+                  {state.isGroup && (
+                    <div className="flex items-start gap-2 rounded-md bg-amber-500/10 border border-amber-500/30 p-2 text-xs text-amber-600 dark:text-amber-400">
+                      <AlertTriangle className="size-3.5 shrink-0 mt-0.5" />
+                      All {groupCount} items in this group will have their location updated.
+                    </div>
+                  )}
+                  <ul className="space-y-1 max-h-40 overflow-y-auto">
+                    {state.items.map((item) => (
+                      <li key={item.id} className="flex items-center gap-2 text-sm">
+                        <CheckCircle className="size-4 text-green-500 shrink-0" />
+                        <span>{item.name}</span>
+                        <Badge variant="outline" className="text-xs font-mono">
+                          {item.sku}
+                        </Badge>
+                        {state.isGroup && item.qty > 0 ? (
+                          <span className="text-xs text-muted-foreground">
+                            × {item.qty}
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              )}
-              <ul className="space-y-1 max-h-40 overflow-y-auto">
-                {state.items.map((item) => (
-                  <li key={item.id} className="flex items-center gap-2 text-sm">
-                    <CheckCircle className="size-4 text-green-500 shrink-0" />
-                    <span>{item.name}</span>
-                    <Badge variant="outline" className="text-xs font-mono">
-                      {item.sku}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            </div>
+              );
+            })()
           ) : state.recognised && state.isGroup ? (
             // Group resolved but its itemLines snapshot is empty — still valid.
             // The Server Action expands the group and updates every member.
