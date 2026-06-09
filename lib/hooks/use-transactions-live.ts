@@ -71,6 +71,7 @@ function toTx(d: QueryDocumentSnapshot): TransactionDoc {
     parentTxId: data.parentTxId ?? null,
     clientTxId: data.clientTxId ?? null,
     deliveryOrderId: data.deliveryOrderId ?? null,
+    location: data.location ?? null,
   };
 }
 

@@ -41,4 +41,8 @@ export type TransactionDoc = {
   // barcode, so the DO detail page can show its own location-update history.
   // Null for item-barcode location updates and all non-location transactions.
   deliveryOrderId: string | null;
+  // quick-kayinleong-013 — the new location value recorded by a `location`
+  // transaction (the per-group "current location" of the item). Null on
+  // non-location transactions and on cleared locations.
+  location: string | null;
 };

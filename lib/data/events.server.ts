@@ -220,6 +220,7 @@ export async function getOpenCheckoutsForEventServer(
         parentTxId: dt.parentTxId ?? null,
         clientTxId: dt.clientTxId ?? null,
         deliveryOrderId: dt.deliveryOrderId ?? null,
+        location: dt.location ?? null,
       } as TransactionDoc;
     });
 }

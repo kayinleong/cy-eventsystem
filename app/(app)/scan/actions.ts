@@ -71,6 +71,11 @@ export async function updateItemsLocationAction(
       notes: txNote,
       parentTxId: null,
       clientTxId: null,
+      // quick-kayinleong-013 — every location tx (item AND group branches)
+      // carries the new location value so the derived "current location" can
+      // be read back from the transaction stream. Stored verbatim (Zod already
+      // constrains it to a string; "" represents a cleared location).
+      location,
     };
   }
 
@@ -179,14 +184,14 @@ export async function updateItemsLocationAction(
       );
     }
 
+    // quick-kayinleong-013 — GROUP scans no longer touch each item's home
+    // `inventory.location`. The move lives ONLY in the transaction stream and
+    // surfaces as a derived "current location" on the DO/Event/Item views.
+    // The batch now contains ONLY the per-member location-tx writes, still
+    // committed atomically (T-013-01: all member txs or none).
     const batch = adminDb.batch();
     for (const itemId of itemIds) {
       const meta = itemMeta.get(itemId)!;
-      batch.update(adminDb.collection("inventory").doc(itemId), {
-        location,
-        updatedAt: FieldValue.serverTimestamp(),
-        updatedBy: session.uid,
-      });
       batch.set(adminDb.collection("transactions").doc(), {
         ...locationTxFields(),
         itemId,
@@ -198,9 +203,17 @@ export async function updateItemsLocationAction(
       });
     }
     await batch.commit();
-    revalidatePath("/inventory");
+    // No `revalidatePath("/inventory")` — the inventory list shows the home
+    // location, which a group scan no longer changes. Per-item detail pages
+    // DO read the latest location tx server-side (Current location row), so
+    // revalidate them. The DO detail page reads the DO-scoped location txs.
+    // The Event tab is a live client subscription (no revalidate needed).
     for (const itemId of itemIds) {
       revalidatePath(`/inventory/${itemId}`);
+    }
+    revalidatePath("/delivery-orders");
+    if (deliveryOrderId) {
+      revalidatePath(`/delivery-orders/${deliveryOrderId}`);
     }
     return { ok: true, updatedItemIds: itemIds, resolvedAs: "group" };
   }

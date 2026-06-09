@@ -91,6 +91,7 @@ function toTx(snap: FirebaseFirestore.QueryDocumentSnapshot): TransactionDoc {
     parentTxId: d.parentTxId ?? null,
     clientTxId: d.clientTxId ?? null,
     deliveryOrderId: d.deliveryOrderId ?? null,
+    location: d.location ?? null,
   };
 }
 
