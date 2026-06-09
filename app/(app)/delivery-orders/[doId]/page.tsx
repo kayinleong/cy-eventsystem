@@ -104,6 +104,33 @@ async function fetchUploaderName(uid: string): Promise<string> {
   return (d.displayName as string) || (d.email as string) || uid;
 }
 
+// quick-kayinleong-013 — derive each item's "current location" (the location
+// value of its latest `type:"location"` transaction scoped to this DO). Reuses
+// the existing transactions(deliveryOrderId, at desc) composite index; the
+// `type === "location"` filter is applied IN CODE so no new index is needed.
+// Because the query is ordered `at desc`, the FIRST location tx seen per itemId
+// is the latest. Null/empty location values are skipped so the cell shows "—".
+async function fetchCurrentLocationsForDO(
+  doId: string,
+): Promise<Map<string, string>> {
+  const snap = await adminDb
+    .collection("transactions")
+    .where("deliveryOrderId", "==", doId)
+    .orderBy("at", "desc")
+    .get();
+  const map = new Map<string, string>();
+  for (const d of snap.docs) {
+    const data = d.data();
+    if (data.type !== "location") continue;
+    const itemId = data.itemId as string | undefined;
+    if (!itemId || map.has(itemId)) continue;
+    const loc = (data.location as string | null) ?? "";
+    if (!loc) continue;
+    map.set(itemId, loc);
+  }
+  return map;
+}
+
 async function fetchItemSummaries(itemIds: string[]): Promise<ItemSummary[]> {
   if (itemIds.length === 0) return [];
   const refs = itemIds.map((id) => adminDb.collection("inventory").doc(id));
@@ -134,9 +161,10 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
   const { doId } = await params;
   const doc = await fetchDeliveryOrder(doId);
   if (!doc) notFound();
-  const [items, uploaderName] = await Promise.all([
+  const [items, uploaderName, currentLocMap] = await Promise.all([
     fetchItemSummaries(doc.itemIds),
     fetchUploaderName(doc.uploadedBy),
+    fetchCurrentLocationsForDO(doId),
   ]);
 
   // Resolve effective item lines with qty:
@@ -251,6 +279,7 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
                     <th className="py-2 pr-6 text-right font-medium text-muted-foreground">Qty</th>
                   )}
                   <th className="py-2 text-left font-medium text-muted-foreground">Location</th>
+                  <th className="py-2 text-left font-medium text-muted-foreground">Current location</th>
                 </tr>
               </thead>
               <tbody>
@@ -274,6 +303,9 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
                     )}
                     <td className="py-2 text-xs text-muted-foreground">
                       {item.location || "—"}
+                    </td>
+                    <td className="py-2 text-xs text-muted-foreground">
+                      {currentLocMap.get(item.id) || "—"}
                     </td>
                   </tr>
                 ))}

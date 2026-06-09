@@ -54,6 +54,29 @@ async function fetchLinkedDeliveryOrders(
     });
 }
 
+// quick-kayinleong-013 — the item's current (group) location = the `location`
+// value of its latest `type:"location"` transaction. Reuses the existing
+// transactions(itemId, at desc) composite index; the `type === "location"`
+// filter is applied IN CODE (no new index). A small .limit(20) bounds the scan
+// (T-013-04) — location txs are interleaved with checkout/checkin rows, and 20
+// covers the realistic recent window. Returns null when none found (the
+// Current location row simply won't render).
+async function fetchCurrentLocation(itemId: string): Promise<string | null> {
+  const snap = await adminDb
+    .collection("transactions")
+    .where("itemId", "==", itemId)
+    .orderBy("at", "desc")
+    .limit(20)
+    .get();
+  for (const d of snap.docs) {
+    const data = d.data();
+    if (data.type !== "location") continue;
+    const loc = (data.location as string | null) ?? "";
+    return loc || null;
+  }
+  return null;
+}
+
 export async function generateMetadata({
   params,
 }: RouteProps): Promise<Metadata> {
@@ -68,8 +91,16 @@ export default async function ItemDetailPage({ params }: RouteProps) {
   if (!item) notFound();
   const session = await verifySession();
   const isAdmin = session?.role === "admin";
-  const deliveryOrders = await fetchLinkedDeliveryOrders(item.deliveryOrderIds);
+  const [deliveryOrders, currentLocation] = await Promise.all([
+    fetchLinkedDeliveryOrders(item.deliveryOrderIds),
+    fetchCurrentLocation(itemId),
+  ]);
   return (
-    <ItemDetail item={item} isAdmin={isAdmin} deliveryOrders={deliveryOrders} />
+    <ItemDetail
+      item={item}
+      isAdmin={isAdmin}
+      deliveryOrders={deliveryOrders}
+      currentLocation={currentLocation}
+    />
   );
 }
