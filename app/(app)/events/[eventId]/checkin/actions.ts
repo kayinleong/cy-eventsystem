@@ -385,13 +385,17 @@ export async function commitCheckinCartAction(input: {
           ((item.outQty as number) ?? 0) - delta.outDelta,
         );
 
-        // Lifecycle bump: if there's available stock again, mark
-        // "available"; otherwise if nothing is out and only damaged
-        // remains, mark "damaged"; otherwise leave as-is.
+        // quick-kayinleong-017 — lifecycle must reflect still-out units. While
+        // anything is out, the item stays "checked_out" (a partial return must
+        // NOT flip it to "available"). Only once nothing is out does it become
+        // "available" (stock back) or "damaged" (only damaged remain). Else
+        // leave as-is.
         let newLifecycle = item.lifecycleState as ItemLifecycleState;
-        if (newAvailable > 0) {
+        if (newOut > 0) {
+          newLifecycle = "checked_out";
+        } else if (newAvailable > 0) {
           newLifecycle = "available";
-        } else if (newOut === 0 && newDamaged > 0) {
+        } else if (newDamaged > 0) {
           newLifecycle = "damaged";
         }
 

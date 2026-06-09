@@ -73,12 +73,11 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 
 const CATEGORIES: ItemCategory[] = ["Audio", "Lighting", "Display", "Marketing"];
-const LIFECYCLES: ItemLifecycleState[] = [
-  "available",
-  "checked_out",
-  "damaged",
-  "retired",
-];
+// quick-kayinleong-017 — Available/Checked-out are quantity-derived and
+// misleading for partial stock (the Available/Out columns are the truth), so
+// they're no longer offered as status filters. Damaged/Retired are real
+// exceptional states and remain.
+const LIFECYCLES: ItemLifecycleState[] = ["damaged", "retired"];
 
 export function InventoryTable({
   initialItems,
@@ -215,11 +214,20 @@ export function InventoryTable({
             Status <ArrowUpDown className="ml-2 size-3" />
           </Button>
         ),
-        cell: ({ row }) => (
-          <StatusBadge tone={statusToTone(row.original.lifecycleState)}>
-            {statusToLabel(row.original.lifecycleState)}
-          </StatusBadge>
-        ),
+        cell: ({ row }) => {
+          // quick-kayinleong-017 — only surface real exceptional states.
+          // Available/Checked out are quantity-derived (and misleading for
+          // partial stock) — the Available/Out columns convey that truth.
+          const s = row.original.lifecycleState;
+          if (s !== "damaged" && s !== "retired") {
+            return <span className="text-muted-foreground">—</span>;
+          }
+          return (
+            <StatusBadge tone={statusToTone(s)}>
+              {statusToLabel(s)}
+            </StatusBadge>
+          );
+        },
       },
     ],
     [],

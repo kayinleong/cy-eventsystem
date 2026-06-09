@@ -74,9 +74,15 @@ export function ItemDetail({
           <div className="space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-lg font-semibold">{item.name}</h1>
-              <StatusBadge tone={statusToTone(item.lifecycleState)}>
-                {statusToLabel(item.lifecycleState)}
-              </StatusBadge>
+              {/* quick-kayinleong-017 — only show real exceptional states.
+                  Available/Checked out are quantity-derived (misleading for
+                  partial stock); the stock breakdown below is the truth. */}
+              {item.lifecycleState === "damaged" ||
+              item.lifecycleState === "retired" ? (
+                <StatusBadge tone={statusToTone(item.lifecycleState)}>
+                  {statusToLabel(item.lifecycleState)}
+                </StatusBadge>
+              ) : null}
             </div>
             <p className="font-mono text-sm text-muted-foreground">{item.sku}</p>
             <p className="text-sm text-muted-foreground">{item.category}</p>
