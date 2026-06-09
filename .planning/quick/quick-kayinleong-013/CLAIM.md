@@ -3,7 +3,8 @@
 - session: claude-code
 - branch: main
 - started: 2026-06-09
-- status: in-progress
+- status: done (display layer superseded by quick-kayinleong-015 — see Status note)
+- completed: 2026-06-09
 - summary: Group-barcode Location scan should set a per-group "current location" (logged + shown on DO/Event/item views) WITHOUT changing each item's master inventory home location.
 
 ## What will change
@@ -139,6 +140,14 @@ The 7-step manual UI walkthrough is pending the user:
 No `firebase deploy` required (no new index, no rules change). quick-012's prior
 index/rules deploy requirement is unaffected by this claim.
 
-**Status:** Code complete; all automated gates PASS. Claim stays `in-progress`
-pending the manual UI verification above (per the plan's blocking checkpoint).
-Flip to `done` once the user confirms the 6 manual checks.
+**Status:** Code complete; all automated gates PASS.
+
+**SUPERSEDED (display layer) by quick-kayinleong-015:** runtime testing revealed
+the per-item current-location model breaks when a SKU is split across multiple
+groups (scanning one group bled its location across every group sharing the SKU).
+quick-015 pivots to a **group-scoped** current location (stored on
+`checkoutGroups.location`, shown per-group on the DO detail) and REMOVES this
+claim's three per-item displays (item page / Event tab / DO items column). This
+claim's CORE behavior — a group scan never changes the home `inventory.location` —
+is retained and built upon by quick-015. The 6-step manual verify above is moot
+(displays removed); see quick-015's verification instead. Marking done.
