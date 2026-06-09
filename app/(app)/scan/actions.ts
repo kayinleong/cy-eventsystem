@@ -187,12 +187,17 @@ export async function updateItemsLocationAction(
       );
     }
 
-    // quick-kayinleong-013 — GROUP scans no longer touch each item's home
-    // `inventory.location`. The move lives ONLY in the transaction stream and
-    // surfaces as a derived "current location" on the DO/Event/Item views.
-    // The batch now contains ONLY the per-member location-tx writes, still
-    // committed atomically (T-013-01: all member txs or none).
+    // quick-kayinleong-013/015 — GROUP scans never touch each item's home
+    // `inventory.location`. The current location is a property of THIS group
+    // (a physical bundle), stored on the checkoutGroups doc — quick-015. A SKU
+    // can be split across multiple groups, so writing per-SKU would bleed one
+    // group's location across every group sharing that SKU.
+    // Per-member location txs are still written (history feeds). The group-doc
+    // update + all member txs commit in a single atomic batch.
     const batch = adminDb.batch();
+    batch.update(adminDb.collection("checkoutGroups").doc(barcodeValue), {
+      location,
+    });
     for (const itemId of itemIds) {
       const meta = itemMeta.get(itemId)!;
       batch.set(adminDb.collection("transactions").doc(), {
@@ -206,14 +211,10 @@ export async function updateItemsLocationAction(
       });
     }
     await batch.commit();
-    // No `revalidatePath("/inventory")` — the inventory list shows the home
-    // location, which a group scan no longer changes. Per-item detail pages
-    // DO read the latest location tx server-side (Current location row), so
-    // revalidate them. The DO detail page reads the DO-scoped location txs.
-    // The Event tab is a live client subscription (no revalidate needed).
-    for (const itemId of itemIds) {
-      revalidatePath(`/inventory/${itemId}`);
-    }
+    // The DO detail page reads each group's location server-side, so revalidate
+    // the delivery-orders surfaces. The inventory list/detail show the home
+    // location (unchanged by a group scan), and the Event tab is a live client
+    // subscription — neither needs revalidation here.
     revalidatePath("/delivery-orders");
     if (deliveryOrderId) {
       revalidatePath(`/delivery-orders/${deliveryOrderId}`);

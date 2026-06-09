@@ -44,15 +44,10 @@ export function ItemDetail({
   item,
   isAdmin,
   deliveryOrders = [],
-  currentLocation = null,
 }: {
   item: InventoryItem;
   isAdmin: boolean;
   deliveryOrders?: ItemDetailDeliveryOrder[];
-  // quick-kayinleong-013 — the item's current (group) location, derived from
-  // its latest `type:"location"` transaction. Shown only when present AND
-  // different from the home location (avoids redundant noise).
-  currentLocation?: string | null;
 }) {
   const stockCards: { label: string; value: number }[] = [
     { label: "Total", value: item.totalQty },
@@ -141,12 +136,6 @@ export function ItemDetail({
                 )}
               </dd>
             </div>
-            {currentLocation && currentLocation !== item.location ? (
-              <div>
-                <dt className="text-muted-foreground">Current location</dt>
-                <dd>{currentLocation}</dd>
-              </div>
-            ) : null}
             <div>
               <dt className="text-muted-foreground">Brand</dt>
               <dd>

@@ -104,31 +104,23 @@ async function fetchUploaderName(uid: string): Promise<string> {
   return (d.displayName as string) || (d.email as string) || uid;
 }
 
-// quick-kayinleong-013 — derive each item's "current location" (the location
-// value of its latest `type:"location"` transaction scoped to this DO). Reuses
-// the existing transactions(deliveryOrderId, at desc) composite index; the
-// `type === "location"` filter is applied IN CODE so no new index is needed.
-// Because the query is ordered `at desc`, the FIRST location tx seen per itemId
-// is the latest. Null/empty location values are skipped so the cell shows "—".
-async function fetchCurrentLocationsForDO(
-  doId: string,
-): Promise<Map<string, string>> {
-  const snap = await adminDb
-    .collection("transactions")
-    .where("deliveryOrderId", "==", doId)
-    .orderBy("at", "desc")
-    .get();
-  const map = new Map<string, string>();
-  for (const d of snap.docs) {
-    const data = d.data();
-    if (data.type !== "location") continue;
-    const itemId = data.itemId as string | undefined;
-    if (!itemId || map.has(itemId)) continue;
-    const loc = (data.location as string | null) ?? "";
-    if (!loc) continue;
-    map.set(itemId, loc);
+// quick-kayinleong-015 — current location is per GROUP (a physical bundle), not
+// per SKU. Read each linked checkoutGroups doc's `location` so the DO's Group
+// Barcodes section can show where each group currently is. Returned as a plain
+// object (groupId → location) to pass into the DODetailActions client island.
+async function fetchGroupLocations(
+  groupIds: string[],
+): Promise<Record<string, string>> {
+  if (groupIds.length === 0) return {};
+  const refs = groupIds.map((id) => adminDb.collection("checkoutGroups").doc(id));
+  const snaps = await adminDb.getAll(...refs);
+  const out: Record<string, string> = {};
+  for (const snap of snaps) {
+    if (!snap.exists) continue;
+    const loc = (snap.data()!.location as string | undefined) ?? "";
+    if (loc) out[snap.id] = loc;
   }
-  return map;
+  return out;
 }
 
 async function fetchItemSummaries(itemIds: string[]): Promise<ItemSummary[]> {
@@ -161,10 +153,10 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
   const { doId } = await params;
   const doc = await fetchDeliveryOrder(doId);
   if (!doc) notFound();
-  const [items, uploaderName, currentLocMap] = await Promise.all([
+  const [items, uploaderName, groupLocations] = await Promise.all([
     fetchItemSummaries(doc.itemIds),
     fetchUploaderName(doc.uploadedBy),
-    fetchCurrentLocationsForDO(doId),
+    fetchGroupLocations(doc.checkoutGroupIds),
   ]);
 
   // Resolve effective item lines with qty:
@@ -279,7 +271,6 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
                     <th className="py-2 pr-6 text-right font-medium text-muted-foreground">Qty</th>
                   )}
                   <th className="py-2 text-left font-medium text-muted-foreground">Location</th>
-                  <th className="py-2 text-left font-medium text-muted-foreground">Current location</th>
                 </tr>
               </thead>
               <tbody>
@@ -304,9 +295,6 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
                     <td className="py-2 text-xs text-muted-foreground">
                       {item.location || "—"}
                     </td>
-                    <td className="py-2 text-xs text-muted-foreground">
-                      {currentLocMap.get(item.id) || "—"}
-                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -327,6 +315,7 @@ export default async function DeliveryOrderDetailPage({ params }: RouteProps) {
               itemLines={effectiveItemLines}
               fallbackItems={items}
               checkoutGroupIds={doc.checkoutGroupIds}
+              groupLocations={groupLocations}
             />
           </CardContent>
         </Card>

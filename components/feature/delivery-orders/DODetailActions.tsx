@@ -37,6 +37,10 @@ type DODetailActionsProps = {
   itemLines: ItemLine[];
   fallbackItems: FallbackItem[];
   checkoutGroupIds: string[];
+  // quick-kayinleong-015 — groupId → current location, set by scanning the group
+  // barcode in Scan → Location. Per-group (not per-SKU): each group tracks its
+  // own location even when groups share a SKU.
+  groupLocations?: Record<string, string>;
 };
 
 export function DODetailActions({
@@ -45,6 +49,7 @@ export function DODetailActions({
   itemLines,
   fallbackItems,
   checkoutGroupIds,
+  groupLocations = {},
 }: DODetailActionsProps) {
   const dateStr = uploadedAt ? new Date(uploadedAt).toLocaleDateString() : "—";
   const hasQty = itemLines.length > 0;
@@ -163,6 +168,9 @@ export function DODetailActions({
                   <p className="text-sm font-medium">Group {idx + 1}</p>
                   <p className="font-mono text-xs text-muted-foreground break-all">
                     {gid}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Current location: {groupLocations[gid] || "—"}
                   </p>
                 </div>
                 <PrintLabelButton

@@ -23,4 +23,9 @@ export type CheckoutGroupDoc = {
   label: string; // human-readable, e.g. "Group 1 of 2 — Spring Demo"
   createdAt: FieldValue | Date;
   createdBy: string; // session.uid
+  // quick-kayinleong-015 — the group's current physical location, set by
+  // scanning the group barcode in Scan → Location. Empty string until first set.
+  // Location is per-group (a physical bundle), NOT per-SKU: a SKU can be split
+  // across multiple groups, so each group tracks its own location independently.
+  location?: string;
 };
