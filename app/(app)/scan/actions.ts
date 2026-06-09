@@ -145,18 +145,27 @@ export async function updateItemsLocationAction(
   if (groupSnap.exists) {
     const group = groupSnap.data() as {
       eventId?: string;
-      itemLines?: { itemId: string; itemSku?: string; itemName?: string }[];
+      label?: string;
+      itemLines?: { itemId: string; itemSku?: string; itemName?: string; qty?: number }[];
     };
-    // Unique itemId → { sku, name } from the group's line snapshot, so each
-    // location transaction carries the item identity for the history feeds.
-    const itemMeta = new Map<string, { sku: string; name: string }>();
+    // quick-kayinleong-016 — capture the group label (e.g. "Group 2 of 2 — ADA
+    // 2026") and per-item qty so each location tx's notes can state how many
+    // units moved and which group barcode.
+    // Unique itemId → { sku, name, qty } from the group's line snapshot (qty
+    // summed across any repeated lines for the same SKU).
+    const groupLabel = group.label ?? null;
+    const itemMeta = new Map<string, { sku: string; name: string; qty: number }>();
     for (const l of group.itemLines ?? []) {
-      if (!itemMeta.has(l.itemId)) {
-        itemMeta.set(l.itemId, {
-          sku: l.itemSku ?? l.itemId,
-          name: l.itemName ?? l.itemId,
-        });
+      const existing = itemMeta.get(l.itemId);
+      if (existing) {
+        existing.qty += l.qty ?? 0;
+        continue;
       }
+      itemMeta.set(l.itemId, {
+        sku: l.itemSku ?? l.itemId,
+        name: l.itemName ?? l.itemId,
+        qty: l.qty ?? 0,
+      });
     }
     const itemIds = [...itemMeta.keys()];
     if (itemIds.length === 0) {
@@ -169,6 +178,9 @@ export async function updateItemsLocationAction(
     const eventId = group.eventId ?? null;
     let eventName: string | null = null;
     let deliveryOrderId: string | null = null;
+    // quick-kayinleong-016 — the DO vendor, surfaced in the tx notes so history
+    // rows say which delivery order the moved group belongs to.
+    let deliveryOrderVendor: string | null = null;
     try {
       if (eventId) {
         const evSnap = await adminDb.collection("events").doc(eventId).get();
@@ -179,7 +191,10 @@ export async function updateItemsLocationAction(
         .where("checkoutGroupIds", "array-contains", barcodeValue)
         .limit(1)
         .get();
-      if (!doSnap.empty) deliveryOrderId = doSnap.docs[0].id;
+      if (!doSnap.empty) {
+        deliveryOrderId = doSnap.docs[0].id;
+        deliveryOrderVendor = (doSnap.docs[0].data().vendor as string) ?? null;
+      }
     } catch (err) {
       console.error(
         "[updateItemsLocationAction] event/DO attribution failed:",
@@ -194,6 +209,20 @@ export async function updateItemsLocationAction(
     // group's location across every group sharing that SKU.
     // Per-member location txs are still written (history feeds). The group-doc
     // update + all member txs commit in a single atomic batch.
+    // quick-kayinleong-016 — per-item notes: how many units moved, which group
+    // (label + scanned barcode), and which DO. Reads e.g.
+    // `Location set to "AAA" · 5 units · Group: Group 2 of 2 — ADA 2026 · Barcode: peUu… · DO: ACME`.
+    const noteFor = (qty: number) => {
+      const parts = [
+        location ? `Location set to "${location}"` : "Location cleared",
+      ];
+      if (qty > 0) parts.push(`${qty} unit${qty === 1 ? "" : "s"}`);
+      if (groupLabel) parts.push(`Group: ${groupLabel}`);
+      parts.push(`Barcode: ${barcodeValue}`);
+      if (deliveryOrderVendor) parts.push(`DO: ${deliveryOrderVendor}`);
+      return parts.join(" · ");
+    };
+
     const batch = adminDb.batch();
     batch.update(adminDb.collection("checkoutGroups").doc(barcodeValue), {
       location,
@@ -205,6 +234,7 @@ export async function updateItemsLocationAction(
         itemId,
         itemSku: meta.sku,
         itemName: meta.name,
+        notes: noteFor(meta.qty),
         eventId,
         eventName,
         deliveryOrderId,
