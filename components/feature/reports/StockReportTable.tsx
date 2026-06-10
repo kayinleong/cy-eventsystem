@@ -69,6 +69,8 @@ const CATEGORIES: ItemCategory[] = [
   "Lighting",
   "Display",
   "Marketing",
+  "Merchandise",
+  "Fragrance",
 ];
 const LIFECYCLES: ItemLifecycleState[] = [
   "available",

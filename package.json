@@ -3,13 +3,16 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "spike:verify-session": "tsx --env-file=.env.local .planning/spikes/next-firebase-auth-edge-v1.12/verify-session.spike.ts",
     "seed:first-admin": "tsx --env-file=.env.local scripts/seed-first-admin.ts",
-    "repair:admin-claims": "tsx --env-file=.env.local scripts/repair-admin-claims.ts"
+    "repair:admin-claims": "tsx --env-file=.env.local scripts/repair-admin-claims.ts",
+    "import:docs:extract": "python3 scripts/import-docs/extract.py",
+    "import:docs:dry": "tsx --env-file=.env.local scripts/import-docs/import.ts",
+    "import:docs:live": "tsx --env-file=.env.local scripts/import-docs/import.ts --live"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

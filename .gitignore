@@ -56,3 +56,6 @@ next-env.d.ts
 functions/lib/
 functions/node_modules/
 
+
+# quick-kayinleong-019 import work dir (downloaded images + manifest)
+scripts/import-docs/.work/

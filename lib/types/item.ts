@@ -11,7 +11,14 @@ export type ItemLifecycleState =
   | "retired";
 
 // CONTEXT.md D-03 — fixed category set for Phase 1 seed.
-export type ItemCategory = "Audio" | "Lighting" | "Display" | "Marketing";
+// quick-kayinleong-019 — Merchandise + Fragrance added for the .docs import.
+export type ItemCategory =
+  | "Audio"
+  | "Lighting"
+  | "Display"
+  | "Marketing"
+  | "Merchandise"
+  | "Fragrance";
 
 export type InventoryItem = {
   id: string; // doc id; equals SKU per PROJECT.md key decision #14

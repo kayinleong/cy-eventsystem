@@ -9,11 +9,15 @@ export const ItemLifecycleStateEnum = z.enum([
 ]);
 
 // CONTEXT.md D-03 — fixed category set for Phase 1 seed.
+// quick-kayinleong-019 — added Merchandise (B&B inventory) + Fragrance
+// (Sankito stock) to host the .docs spreadsheet import.
 export const ItemCategoryEnum = z.enum([
   "Audio",
   "Lighting",
   "Display",
   "Marketing",
+  "Merchandise",
+  "Fragrance",
 ]);
 
 // Full inventory doc schema — mirrors lib/types/item.ts.

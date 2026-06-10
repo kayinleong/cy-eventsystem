@@ -72,7 +72,14 @@ import {
 } from "@/components/ui/select";
 import { EmptyState } from "@/components/ui/empty-state";
 
-const CATEGORIES: ItemCategory[] = ["Audio", "Lighting", "Display", "Marketing"];
+const CATEGORIES: ItemCategory[] = [
+  "Audio",
+  "Lighting",
+  "Display",
+  "Marketing",
+  "Merchandise",
+  "Fragrance",
+];
 // quick-kayinleong-017 — Available/Checked-out are quantity-derived and
 // misleading for partial stock (the Available/Out columns are the truth), so
 // they're no longer offered as status filters. Damaged/Retired are real
