@@ -8,8 +8,8 @@
 //   - REP-07 — cursor window = 50 rows.
 //
 // Phase 2 swap from Phase 1:
-//   - useMockStore → SSR-seeded `initialItems` + useInventoryLive for live
-//     updates (D-20 50-row window).
+//   - useMockStore → SSR-seeded `initialItems` rendered directly.
+//     quick-kayinleong-020 dropped the client live listener; mirrors /users.
 //   - Inline category + lifecycleState filters mirror /inventory pattern.
 //   - Cursor pagination via Next/Prev buttons (cursor URL contract per D-17).
 //
@@ -20,7 +20,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   flexRender,
   getCoreRowModel,
@@ -36,7 +36,6 @@ import {
   Package,
 } from "lucide-react";
 
-import { useInventoryLive } from "@/lib/hooks/use-inventory-live";
 import { useUrlTableState } from "@/lib/hooks/use-url-table-state";
 import type {
   InventoryItem,
@@ -87,12 +86,23 @@ export function StockReportTable({
   nextCursor: string | null;
 }) {
   const router = useRouter();
-  const itemsLive = useInventoryLive(initialItems);
-  const items = useMemo(() => [...itemsLive], [itemsLive]);
+  const searchParams = useSearchParams();
+  // quick-kayinleong-020: render the SSR-paginated seed directly (no client
+  // onSnapshot listener) — mirrors /users.
+  const items = useMemo(() => [...initialItems], [initialItems]);
 
-  const { state: url, setGlobalFilter, setFilter, setCursor } = useUrlTableState(
+  const { state: url, setGlobalFilter, setFilter } = useUrlTableState(
     ["category", "lifecycleState"],
   );
+
+  // quick-kayinleong-020: build the Next href from the current params so
+  // active filter/sort/search survive (REP-06 shareable URLs).
+  const nextHref = useMemo(() => {
+    if (!nextCursor) return null;
+    const next = new URLSearchParams(Array.from(searchParams.entries()));
+    next.set("cursor", nextCursor);
+    return `/reports/stock?${next.toString()}`;
+  }, [searchParams, nextCursor]);
 
   // Client-side filter inside the 50-row cursor window. Server already
   // applied category / lifecycleState filters in getInventoryPage; this
@@ -246,9 +256,6 @@ export function StockReportTable({
   function goPrev() {
     router.back();
   }
-  function goNext() {
-    if (nextCursor) setCursor(nextCursor);
-  }
 
   return (
     <div className="space-y-3">
@@ -367,15 +374,22 @@ export function StockReportTable({
           >
             <ChevronLeft className="size-4" /> Prev
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={goNext}
-            disabled={!nextCursor}
-            aria-label="Next page"
-          >
-            Next <ChevronRight className="size-4" />
-          </Button>
+          {nextHref ? (
+            <Button asChild variant="outline" size="sm" aria-label="Next page">
+              <Link href={nextHref}>
+                Next <ChevronRight className="size-4" />
+              </Link>
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled
+              aria-label="Next page"
+            >
+              Next <ChevronRight className="size-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>

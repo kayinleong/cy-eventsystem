@@ -11,8 +11,10 @@
 //   - REP-07 — cursor window = 50 rows
 //
 // Phase 2 swap from Phase 1:
-//   - mock-store hook → SSR-seeded `initialEvents` + `useEventsLive(initial,
-//     {session, status})` for live updates (D-20 listener scope).
+//   - mock-store hook → SSR-seeded `initialEvents` rendered directly.
+//     quick-kayinleong-020 dropped the client live listener; EVT-08 staff
+//     scoping is enforced by getEventsPage at the SSR layer
+//     (events.server.ts:110-111), so dropping it does not weaken scoping.
 //   - URL contract `?page=N` → `?cursor=xxx` per D-17. TanStack table runs
 //     with `manualPagination: true`. "Page N of M" UI replaced with prev/next.
 //   - Filter changes clear the cursor automatically via useUrlTableState.
@@ -27,7 +29,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   flexRender,
   getCoreRowModel,
@@ -43,7 +45,6 @@ import {
   ChevronRight,
 } from "lucide-react";
 
-import { useEventsLive } from "@/lib/hooks/use-events-live";
 import { useUrlTableState } from "@/lib/hooks/use-url-table-state";
 import { deriveEventStatus } from "@/lib/utils/event-status";
 import type { EventDoc, EventStatus } from "@/lib/types/event";
@@ -92,23 +93,32 @@ export function EventsTable({
   session: Session;
 }) {
   const router = useRouter();
-  const { state: url, setGlobalFilter, setFilter, setCursor } = useUrlTableState(
+  const searchParams = useSearchParams();
+  const { state: url, setGlobalFilter, setFilter } = useUrlTableState(
     ["status"],
   );
 
-  // Default to all statuses — matches the SSR seed in page.tsx so the
-  // listener doesn't briefly disagree with the server-rendered first paint.
-  // EVT-08 access already filters down to events the user can see.
+  // Default to all statuses — matches the SSR seed in page.tsx.
   const statusFilter = url.filters.status ?? "_all";
-  const liveStatus = statusFilter === "_all" ? undefined : statusFilter;
 
-  // D-20: page-scoped live data, 50-row window. EVT-08 baked in via session.
-  const eventsLive = useEventsLive(initialEvents, {
-    session,
-    status: liveStatus,
-  });
+  // quick-kayinleong-020: render the SSR-paginated seed directly (no client
+  // onSnapshot listener) — mirrors /users. EVT-08 staff scoping is enforced
+  // by getEventsPage at the SSR layer (events.server.ts:110-111), so dropping
+  // the listener does not weaken staff scoping. The `session` prop is kept on
+  // the component contract (SSR-side EVT-08 contract / prop shape); it is no
+  // longer read client-side.
+  void session;
   // Memoize so TanStack sees a stable reference.
-  const events = useMemo(() => [...eventsLive], [eventsLive]);
+  const events = useMemo(() => [...initialEvents], [initialEvents]);
+
+  // quick-kayinleong-020: build the Next href from the current params so
+  // active filter/sort/search survive (REP-06 shareable URLs).
+  const nextHref = useMemo(() => {
+    if (!nextCursor) return null;
+    const next = new URLSearchParams(Array.from(searchParams.entries()));
+    next.set("cursor", nextCursor);
+    return `/events?${next.toString()}`;
+  }, [searchParams, nextCursor]);
 
   // Client-side global-filter pass (name + location) within the 50-row
   // cursor window. The server query already applied status; q is local.
@@ -237,9 +247,6 @@ export function EventsTable({
     // Cursors are forward-only; rely on browser back to pop the cursor stack.
     router.back();
   }
-  function goNext() {
-    if (nextCursor) setCursor(nextCursor);
-  }
 
   return (
     <div className="space-y-3">
@@ -348,15 +355,22 @@ export function EventsTable({
           >
             <ChevronLeft className="size-4" /> Prev
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={goNext}
-            disabled={!nextCursor}
-            aria-label="Next page"
-          >
-            Next <ChevronRight className="size-4" />
-          </Button>
+          {nextHref ? (
+            <Button asChild variant="outline" size="sm" aria-label="Next page">
+              <Link href={nextHref}>
+                Next <ChevronRight className="size-4" />
+              </Link>
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled
+              aria-label="Next page"
+            >
+              Next <ChevronRight className="size-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>

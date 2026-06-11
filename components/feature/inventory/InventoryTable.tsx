@@ -8,8 +8,9 @@
 //   - REP-07 — cursor window = 50 rows
 //
 // Phase 2 swap from Phase 1:
-//   - mock-store hook → SSR-seeded `initialItems` + `useInventoryLive(initial)`
-//     for live updates (D-20 listener scope: 50-row visible window).
+//   - mock-store hook → SSR-seeded `initialItems` rendered directly.
+//     quick-kayinleong-020 dropped the client live listener (it clobbered the
+//     cursor seed and doubled reads); the table now mirrors /users.
 //   - URL contract `?page=N` → `?cursor=xxx` per D-17. TanStack table runs
 //     with `manualPagination: true` (server-driven slice), pageCount: -1
 //     because Firestore cannot return a total count. "Page N of M" UI is
@@ -30,7 +31,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   flexRender,
   getCoreRowModel,
@@ -41,7 +42,6 @@ import {
 } from "@tanstack/react-table";
 import { ArrowUpDown, ChevronLeft, ChevronRight, Package } from "lucide-react";
 
-import { useInventoryLive } from "@/lib/hooks/use-inventory-live";
 import { useUrlTableState } from "@/lib/hooks/use-url-table-state";
 import type {
   InventoryItem,
@@ -94,15 +94,26 @@ export function InventoryTable({
   nextCursor: string | null;
 }) {
   const router = useRouter();
-  // D-20: page-scoped live data, 50-row window. The hook seeds from SSR
-  // and takes over via onSnapshot for the same query slice.
-  const itemsLive = useInventoryLive(initialItems);
+  const searchParams = useSearchParams();
+  // quick-kayinleong-020: render the SSR-paginated seed directly (no client
+  // onSnapshot listener) — mirrors /users (use-users-live.ts:29-31). This
+  // fixes broken Next (nothing clobbers the page-2 seed) and halves
+  // reads-per-view. Detail/scan/dashboard surfaces keep their live hooks.
   // Memoize to give TanStack a stable identity for sort/filter perf.
-  const items = useMemo(() => [...itemsLive], [itemsLive]);
+  const items = useMemo(() => [...initialItems], [initialItems]);
 
-  const { state: url, setGlobalFilter, setFilter, setCursor } = useUrlTableState(
+  const { state: url, setGlobalFilter, setFilter } = useUrlTableState(
     ["category", "lifecycleState", "isLowStock"],
   );
+
+  // quick-kayinleong-020: build the Next href from the current params so
+  // active filter/sort/search survive (REP-06 shareable URLs).
+  const nextHref = useMemo(() => {
+    if (!nextCursor) return null;
+    const next = new URLSearchParams(Array.from(searchParams.entries()));
+    next.set("cursor", nextCursor);
+    return `/inventory?${next.toString()}`;
+  }, [searchParams, nextCursor]);
 
   // Client-side filter within the 50-row cursor window per D-20. Server
   // already applied category / lifecycleState / isLowStock filters in
@@ -270,9 +281,6 @@ export function InventoryTable({
     // Cursors are forward-only; rely on browser back to pop the cursor stack.
     router.back();
   }
-  function goNext() {
-    if (nextCursor) setCursor(nextCursor);
-  }
 
   return (
     <div className="space-y-3">
@@ -409,15 +417,22 @@ export function InventoryTable({
           >
             <ChevronLeft className="size-4" /> Prev
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={goNext}
-            disabled={!nextCursor}
-            aria-label="Next page"
-          >
-            Next <ChevronRight className="size-4" />
-          </Button>
+          {nextHref ? (
+            <Button asChild variant="outline" size="sm" aria-label="Next page">
+              <Link href={nextHref}>
+                Next <ChevronRight className="size-4" />
+              </Link>
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled
+              aria-label="Next page"
+            >
+              Next <ChevronRight className="size-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>

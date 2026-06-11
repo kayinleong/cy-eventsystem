@@ -5,13 +5,13 @@
 //   - REP-06 — sort/page/filter state is URL-synced (eventId filter key).
 //   - REP-07 — cursor window = 50 rows.
 //
-// Open-line derivation:
-//   - Subscribe to checkout transactions (initialCheckouts from SSR).
-//   - Subscribe to checkin transactions matching the visible event window.
-//   - Open = checkout.id NOT in any checkin.parentTxId.
-//
-// Same pattern as EventAssignedItemsTab (02-08): the listener scope is
-// 50-row windowed per D-20, the filter happens in JS over that slice.
+// Open-line derivation (quick-kayinleong-020):
+//   - `initialCheckouts` is ALREADY open-only — /reports/out/page.tsx fetches
+//     the checkout cursor page and subtracts checkouts that have a matching
+//     checkin (server-side, via getOpenCheckoutIdsForCheckouts).
+//   - The old client onSnapshot listeners (checkout + checkin) were dropped:
+//     they clobbered the cursor seed (broke Next) and doubled Firestore reads.
+//     This table now renders the SSR seed directly, mirroring /users.
 //
 // D-11 sortable-columns rule: sortable = at (chronological axis). Non-sortable:
 // itemName, qty, eventName, actorName.
@@ -20,7 +20,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   flexRender,
   getCoreRowModel,
@@ -36,7 +36,6 @@ import {
   PackageOpen,
 } from "lucide-react";
 
-import { useTransactionsLive } from "@/lib/hooks/use-transactions-live";
 import { useUrlTableState } from "@/lib/hooks/use-url-table-state";
 import type { TransactionDoc } from "@/lib/types/transaction";
 import {
@@ -59,35 +58,26 @@ export function ItemsOutTable({
   nextCursor: string | null;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const { state: url, setGlobalFilter, setCursor } = useUrlTableState([
-    "eventId",
-  ]);
+  const { state: url, setGlobalFilter } = useUrlTableState(["eventId"]);
 
-  // Two listeners scoped to the visible 50-row window per D-20. SSR seed
-  // for checkouts gives the first paint; the listener takes over once
-  // auth resolves.
-  const checkoutsLive = useTransactionsLive({
-    type: "checkout",
-    eventId: url.filters.eventId || undefined,
-    limit: 50,
-    initial: initialCheckouts,
-  });
-  const checkinsLive = useTransactionsLive({
-    type: "checkin",
-    eventId: url.filters.eventId || undefined,
-    limit: 50,
-  });
+  // quick-kayinleong-020: `initialCheckouts` is already open-only (derived
+  // server-side in /reports/out/page.tsx). Render the SSR seed directly — no
+  // client onSnapshot listener.
+  const openCheckouts = useMemo(
+    () => [...initialCheckouts],
+    [initialCheckouts],
+  );
 
-  // Open-line derivation: checkout.id not referenced by any checkin.parentTxId.
-  const openCheckouts = useMemo(() => {
-    const closedParents = new Set(
-      checkinsLive
-        .map((t) => t.parentTxId)
-        .filter((id): id is string => typeof id === "string" && id.length > 0),
-    );
-    return checkoutsLive.filter((t) => !closedParents.has(t.id));
-  }, [checkoutsLive, checkinsLive]);
+  // quick-kayinleong-020: build the Next href from the current params so
+  // active filter/sort/search survive (REP-06 shareable URLs).
+  const nextHref = useMemo(() => {
+    if (!nextCursor) return null;
+    const next = new URLSearchParams(Array.from(searchParams.entries()));
+    next.set("cursor", nextCursor);
+    return `/reports/out?${next.toString()}`;
+  }, [searchParams, nextCursor]);
 
   const filtered = useMemo(() => {
     if (!url.q) return openCheckouts;
@@ -188,9 +178,6 @@ export function ItemsOutTable({
   function goPrev() {
     router.back();
   }
-  function goNext() {
-    if (nextCursor) setCursor(nextCursor);
-  }
 
   return (
     <div className="space-y-3">
@@ -274,15 +261,22 @@ export function ItemsOutTable({
           >
             <ChevronLeft className="size-4" /> Prev
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={goNext}
-            disabled={!nextCursor}
-            aria-label="Next page"
-          >
-            Next <ChevronRight className="size-4" />
-          </Button>
+          {nextHref ? (
+            <Button asChild variant="outline" size="sm" aria-label="Next page">
+              <Link href={nextHref}>
+                Next <ChevronRight className="size-4" />
+              </Link>
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled
+              aria-label="Next page"
+            >
+              Next <ChevronRight className="size-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>

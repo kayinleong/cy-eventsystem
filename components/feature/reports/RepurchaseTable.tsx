@@ -8,8 +8,9 @@
 //   - REP-07 — cursor window = 50 rows.
 //
 // Phase 2 swap from Phase 1:
-//   - useMockStore + selectLowStockItems → useInventoryLive scoped to
-//     {isLowStock: true, limit: 50} (D-20 listener window).
+//   - useMockStore + selectLowStockItems → SSR-seeded `initial` (already the
+//     low-stock page) rendered directly. quick-kayinleong-020 dropped the
+//     client live listener; the table mirrors /users.
 //   - markLowStockOrdered (mock mutator) → markLowStockOrdered Server Action;
 //     useTransition for pending state. Phase 1 mock-store actor lookup
 //     removed — Server Action derives the actor via requireAdmin().
@@ -23,7 +24,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTransition } from "react";
 import {
   flexRender,
@@ -41,7 +42,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { useInventoryLive } from "@/lib/hooks/use-inventory-live";
 import { useUrlTableState } from "@/lib/hooks/use-url-table-state";
 import { useCurrentUser } from "@/lib/hooks/use-current-user";
 import { markLowStockOrdered } from "@/app/(app)/inventory/actions";
@@ -67,19 +67,29 @@ export function RepurchaseTable({
   nextCursor: string | null;
 }) {
   const router = useRouter();
-  const itemsLive = useInventoryLive(initial, {
-    isLowStock: true,
-    limit: 50,
-  });
+  const searchParams = useSearchParams();
+  // quick-kayinleong-020: render the SSR-paginated seed (already the
+  // low-stock page) directly — no client onSnapshot listener. Client
+  // filtering of lowStockOrderedAt + search stays correct.
+  const items = useMemo(() => [...initial], [initial]);
   const session = useCurrentUser();
   const [pending, startTransition] = useTransition();
 
-  const { state: url, setGlobalFilter, setCursor } = useUrlTableState();
+  const { state: url, setGlobalFilter } = useUrlTableState();
+
+  // quick-kayinleong-020: build the Next href from the current params so
+  // active search survives (REP-06 shareable URLs).
+  const nextHref = useMemo(() => {
+    if (!nextCursor) return null;
+    const next = new URLSearchParams(Array.from(searchParams.entries()));
+    next.set("cursor", nextCursor);
+    return `/reports/repurchase?${next.toString()}`;
+  }, [searchParams, nextCursor]);
 
   // Hide items already marked as ordered (RP-04: lowStockOrderedAt set means
   // a replenishment is in flight — keep them out of the actionable list).
   const filtered = useMemo(() => {
-    return itemsLive.filter((i) => {
+    return items.filter((i) => {
       if (i.lowStockOrderedAt) return false;
       if (url.q) {
         const q = url.q.toLowerCase();
@@ -92,7 +102,7 @@ export function RepurchaseTable({
       }
       return true;
     });
-  }, [itemsLive, url.q]);
+  }, [items, url.q]);
 
   function markOrdered(itemId: string, name: string) {
     startTransition(async () => {
@@ -200,13 +210,10 @@ export function RepurchaseTable({
   });
 
   const rows = table.getRowModel().rows;
-  const isEmpty = itemsLive.length === 0;
+  const isEmpty = items.length === 0;
 
   function goPrev() {
     router.back();
-  }
-  function goNext() {
-    if (nextCursor) setCursor(nextCursor);
   }
 
   return (
@@ -290,15 +297,22 @@ export function RepurchaseTable({
           >
             <ChevronLeft className="size-4" /> Prev
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={goNext}
-            disabled={!nextCursor}
-            aria-label="Next page"
-          >
-            Next <ChevronRight className="size-4" />
-          </Button>
+          {nextHref ? (
+            <Button asChild variant="outline" size="sm" aria-label="Next page">
+              <Link href={nextHref}>
+                Next <ChevronRight className="size-4" />
+              </Link>
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled
+              aria-label="Next page"
+            >
+              Next <ChevronRight className="size-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>

@@ -145,3 +145,48 @@ export async function getTransactionsPage(opts: {
       : null;
   return { transactions, nextCursor };
 }
+
+/**
+ * quick-kayinleong-020 — open-only derivation for /reports/out.
+ *
+ * Given a page of checkout transaction ids, returns the SET of those ids that
+ * are CLOSED — i.e. referenced by at least one checkin's `parentTxId`. The
+ * caller subtracts this set from the checkout page to render open-only rows.
+ *
+ * Replaces the old client-side `checkinsLive` onSnapshot derivation in
+ * ItemsOutTable (which clobbered the cursor seed and doubled reads). Uses a
+ * `where("parentTxId","in",[…])` query chunked at Firestore's 30-id `in`-clause
+ * limit. Returns an empty set when given no ids.
+ */
+export async function getOpenCheckoutIdsForCheckouts(
+  checkoutIds: string[],
+): Promise<Set<string>> {
+  const closed = new Set<string>();
+  if (checkoutIds.length === 0) return closed;
+
+  const CHUNK = 30; // Firestore `in`-clause limit.
+  const chunks: string[][] = [];
+  for (let i = 0; i < checkoutIds.length; i += CHUNK) {
+    chunks.push(checkoutIds.slice(i, i + CHUNK));
+  }
+
+  const snaps = await Promise.all(
+    chunks.map((ids) =>
+      adminDb
+        .collection("transactions")
+        .where("type", "==", "checkin")
+        .where("parentTxId", "in", ids)
+        .get(),
+    ),
+  );
+
+  for (const snap of snaps) {
+    for (const doc of snap.docs) {
+      const parent = doc.data().parentTxId;
+      if (typeof parent === "string" && parent.length > 0) {
+        closed.add(parent);
+      }
+    }
+  }
+  return closed;
+}

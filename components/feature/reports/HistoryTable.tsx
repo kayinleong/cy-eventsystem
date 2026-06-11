@@ -7,7 +7,9 @@
 //   - REP-07 — cursor window = 50 rows.
 //
 // Phase 2 swap from Phase 1:
-//   - useMockStore → useTransactionsLive scoped to the active filter set.
+//   - useMockStore → SSR-seeded `initial` rendered directly. The route handler
+//     applies all URL filters to the seed; quick-kayinleong-020 dropped the
+//     client live listener (mirrors /users).
 //   - Filter dropdowns drive URL state. Each filter axis maps onto one of
 //     the composite indexes pre-declared in 02-02 firestore.indexes.json.
 //   - Cursor pagination via SSR-seeded nextCursor + Next/Prev buttons.
@@ -24,7 +26,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   flexRender,
   getCoreRowModel,
@@ -40,7 +42,6 @@ import {
   ChevronRight,
 } from "lucide-react";
 
-import { useTransactionsLive } from "@/lib/hooks/use-transactions-live";
 import { useUrlTableState } from "@/lib/hooks/use-url-table-state";
 import type {
   TransactionDoc,
@@ -85,32 +86,30 @@ export function HistoryTable({
   nextCursor: string | null;
 }) {
   const router = useRouter();
-  const { state: url, setGlobalFilter, setFilter, setCursor } = useUrlTableState(
+  const searchParams = useSearchParams();
+  const { state: url, setGlobalFilter, setFilter } = useUrlTableState(
     ["type", "eventId", "itemId", "actorUid"],
   );
 
-  // Pick a single-axis filter for the live listener — composite indexes
-  // from 02-02 cover each axis separately. Multi-axis filters fall back
-  // to the SSR cursor re-fetch on URL change.
-  const liveFilter = useMemo(() => {
-    if (url.filters.type) return { type: url.filters.type as TransactionType };
-    if (url.filters.eventId) return { eventId: url.filters.eventId };
-    if (url.filters.itemId) return { itemId: url.filters.itemId };
-    if (url.filters.actorUid) return { actorUid: url.filters.actorUid };
-    return {};
-  }, [url.filters]);
+  // quick-kayinleong-020: render the SSR-paginated seed directly (no client
+  // onSnapshot listener) — mirrors /users. The SSR seed in the route handler
+  // applies all URL filters together; the client `filtered` below re-applies
+  // them over the seed so multi-axis filtering still works within the window.
+  const txs = useMemo(() => [...initial], [initial]);
 
-  const txsLive = useTransactionsLive({
-    ...liveFilter,
-    limit: 50,
-    initial,
-  });
+  // quick-kayinleong-020: build the Next href from the current params so
+  // active filter/sort/search survive (REP-06 shareable URLs).
+  const nextHref = useMemo(() => {
+    if (!nextCursor) return null;
+    const next = new URLSearchParams(Array.from(searchParams.entries()));
+    next.set("cursor", nextCursor);
+    return `/reports/history?${next.toString()}`;
+  }, [searchParams, nextCursor]);
 
   // Client-side filter inside the 50-row cursor window. Defensive — when
-  // multiple filters apply but the listener only picks the first axis,
-  // re-apply the rest here.
+  // multiple filters apply, re-apply them all here over the seed.
   const filtered = useMemo(() => {
-    return txsLive.filter((t) => {
+    return txs.filter((t) => {
       if (url.filters.type && t.type !== url.filters.type) return false;
       if (url.filters.eventId && t.eventId !== url.filters.eventId)
         return false;
@@ -133,7 +132,7 @@ export function HistoryTable({
       }
       return true;
     });
-  }, [txsLive, url.filters, url.q]);
+  }, [txs, url.filters, url.q]);
 
   const columns: ColumnDef<TransactionDoc>[] = useMemo(
     () => [
@@ -229,13 +228,10 @@ export function HistoryTable({
   });
 
   const rows = table.getRowModel().rows;
-  const isEmpty = txsLive.length === 0;
+  const isEmpty = txs.length === 0;
 
   function goPrev() {
     router.back();
-  }
-  function goNext() {
-    if (nextCursor) setCursor(nextCursor);
   }
 
   return (
@@ -338,15 +334,22 @@ export function HistoryTable({
           >
             <ChevronLeft className="size-4" /> Prev
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={goNext}
-            disabled={!nextCursor}
-            aria-label="Next page"
-          >
-            Next <ChevronRight className="size-4" />
-          </Button>
+          {nextHref ? (
+            <Button asChild variant="outline" size="sm" aria-label="Next page">
+              <Link href={nextHref}>
+                Next <ChevronRight className="size-4" />
+              </Link>
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled
+              aria-label="Next page"
+            >
+              Next <ChevronRight className="size-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>
